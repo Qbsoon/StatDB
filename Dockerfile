@@ -13,8 +13,10 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ── runtime stage ──────────────────────────────────────────
 FROM python:3.12-slim
 
-# Non-root user.
-RUN groupadd --system --gid 1000 statdb \
+# Non-root user + gosu for privilege dropping in entrypoint.
+RUN apt-get update && apt-get install -y --no-install-recommends gosu \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid 1000 statdb \
  && useradd  --system --uid 1000 --gid statdb --home-dir /app --shell /sbin/nologin statdb \
  && mkdir -p /app/data \
  && chown -R statdb:statdb /app
@@ -30,7 +32,10 @@ COPY --chown=statdb:statdb run.py pyproject.toml ./
 
 # Ensure data dir is writable by non-root user (volume mount point).
 RUN chown -R statdb:statdb /app/data
-USER statdb
+
+# Entrypoint fixes volume ownership before dropping to non-root user.
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Expose the default port.
 EXPOSE 5000
@@ -46,4 +51,5 @@ ENV STATDB_HOST=0.0.0.0 \
     STATDB_DATA_DIR=/app/data \
     PYTHONUNBUFFERED=1
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["hypercorn", "run:app", "--bind", "0.0.0.0:5000"]
