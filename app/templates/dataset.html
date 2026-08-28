@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field with context %}
+{% block title %}{{ dataset.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('web.datasets') }}">{{ t("dataset.back") }}</a></p>
+<h1>{{ dataset.name }} <span class="muted">({{ dataset.slug }})</span></h1>
+{% if dataset.description %}<p class="muted">{{ dataset.description }}</p>{% endif %}
+
+<p class="export-links">
+  <a href="/datasets/{{ dataset.id }}/export?format=csv" class="btn">{{ t("transfer.export_csv") }}</a>
+  <a href="/datasets/{{ dataset.id }}/export?format=json" class="btn">{{ t("transfer.export_json") }}</a>
+</p>
+
+<h2>{{ t("records.title") }}</h2>
+
+{% if not dataset.columns %}
+  <p class="muted">{{ t("records.need_columns") }}</p>
+{% else %}
+  <table class="table records-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        {% for col in dataset.columns %}<th>{{ col.label }}</th>{% endfor %}
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows["items"] %}
+        <tr>
+          <td class="small">{{ row.id }}</td>
+          {% for col in dataset.columns %}
+            <td>{{ field(col, row[col.key], "row-" ~ row.id) }}</td>
+          {% endfor %}
+          <td class="actions">
+            <button type="submit" form="row-{{ row.id }}">{{ t("dataset.save") }}</button>
+            <button type="submit" form="rowdel-{{ row.id }}" class="danger"
+                    onclick="return confirm({{ t('records.confirm_delete', id=row.id) | tojson }})">{{ t("dataset.delete") }}</button>
+          </td>
+        </tr>
+      {% endfor %}
+      <tr class="add-row">
+        <td class="small">+</td>
+        {% for col in dataset.columns %}
+          <td>{{ field(col, none, "row-new") }}</td>
+        {% endfor %}
+        <td class="actions">
+          <button type="submit" form="row-new">{{ t("records.add_btn") }}</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="muted small">{{ t("records.count", count=rows.total) }}</p>
+
+  {% for row in rows["items"] %}
+    <form id="row-{{ row.id }}" method="post" action="{{ url_for('web.row_update', dataset_id=dataset.id, row_id=row.id, next=request.path) }}"></form>
+    <form id="rowdel-{{ row.id }}" method="post" action="{{ url_for('web.row_delete', dataset_id=dataset.id, row_id=row.id, next=request.path) }}"></form>
+  {% endfor %}
+  <form id="row-new" method="post" action="{{ url_for('web.row_create', dataset_id=dataset.id, next=request.path) }}"></form>
+{% endif %}
+
+<h2>{{ t("dataset.schema") }}</h2>
+
+{% if not dataset.columns %}
+  <p class="muted">{{ t("dataset.no_columns") }}</p>
+{% else %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>{{ t("dataset.column_key") }}</th>
+        <th>{{ t("dataset.column_label") }}</th>
+        <th>{{ t("dataset.column_type") }}</th>
+        <th>{{ t("dataset.column_config") }}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for col in dataset.columns %}
+        <tr>
+          <form method="post" action="{{ url_for('web.column_update', column_id=col.id, next=request.path) }}">
+            <td><code>{{ col.key }}</code></td>
+            <td><input name="label" value="{{ col.label }}"></td>
+            <td><code class="muted">{{ col.type }}</code></td>
+            <td>
+              <input name="config" value="{{ col.config | tojson }}" class="mono">
+            </td>
+            <td class="actions">
+              <button type="submit" formaction="{{ url_for('web.column_update', column_id=col.id, next=request.path) }}">{{ t("dataset.save") }}</button>
+              <button type="submit" form="del-{{ col.id }}" class="danger"
+                      onclick="return confirm({{ t('dataset.confirm_delete_column', key=col.key) | tojson }})">{{ t("dataset.delete") }}</button>
+            </td>
+          </form>
+        </tr>
+        <form id="del-{{ col.id }}" method="post" action="{{ url_for('web.column_delete', column_id=col.id, next=request.path) }}"></form>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+
+<h3>{{ t("dataset.add_column") }}</h3>
+<form method="post" action="{{ url_for('web.column_add', dataset_id=dataset.id, next=request.path) }}" class="form-grid cols">
+  <label>{{ t("dataset.column_key") }}
+    <input name="key" required pattern="[a-z][a-z0-9_]*">
+  </label>
+  <label>{{ t("dataset.column_label") }}
+    <input name="label">
+  </label>
+  <label>{{ t("dataset.column_type") }}
+    <select name="type">
+      {% for ty in ["select","int","float","text","currency","formula","date","date-long","datetime","year","year-month"] %}
+        <option value="{{ ty }}">{{ ty }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>{{ t("dataset.column_config") }}
+    <input name="config" value='{}' class="mono">
+  </label>
+  <button type="submit">{{ t("datasets.create_btn") }}</button>
+</form>
+
+<h2>{{ t("dataset.preset_months") }}</h2>
+<p class="muted small">{{ t("dataset.preset_hint") }}</p>
+<form method="post" action="{{ url_for('web.column_month_preset', dataset_id=dataset.id, next=request.path) }}">
+  <button type="submit">{{ t("dataset.preset_months") }}</button>
+</form>
+{% endblock %}

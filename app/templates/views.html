@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ t("views.title") }} · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ t("views.title") }}</h1>
+
+{% if not views %}
+  <p class="muted">{{ t("views.empty") }}</p>
+{% else %}
+  <ul class="dataset-list">
+    {% for v in views %}
+      <li class="dataset-card">
+        <a class="dataset-name" href="{{ url_for('web.view_detail', view_id=v.id) }}">{{ v.name }}</a>
+        <span class="muted small">{{ t("views.widgets_count", count=v.widgets|length) }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+<h2>{{ t("views.new") }}</h2>
+<form method="post" action="{{ url_for('web.view_create') }}" class="form-grid">
+  <label>
+    {{ t("views.name") }}
+    <input name="name" required>
+  </label>
+  <button type="submit">{{ t("datasets.create_btn") }}</button>
+</form>
+{% endblock %}

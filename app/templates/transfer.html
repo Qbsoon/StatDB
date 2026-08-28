@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ t("transfer.title") }} — StatDB{% endblock %}
+{% block content %}
+<h1>{{ t("transfer.title") }}</h1>
+
+<section class="card">
+  <h2>{{ t("transfer.import_csv") }}</h2>
+  <p>{{ t("transfer.import_csv_desc") }}</p>
+  <form method="post" action="/datasets/import-csv" enctype="multipart/form-data" class="form-row">
+    <input type="file" name="file" accept=".csv" required>
+    <input type="text" name="slug" placeholder="{{ t('transfer.slug_placeholder') }}">
+    <input type="text" name="name" placeholder="{{ t('transfer.name_placeholder') }}">
+    <button type="submit">{{ t("transfer.import_button") }}</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>{{ t("transfer.backup") }}</h2>
+  <p>{{ t("transfer.backup_desc") }}</p>
+  <a href="/backup" class="btn">{{ t("transfer.backup_download") }}</a>
+</section>
+
+<section class="card">
+  <h2>{{ t("transfer.views_export") }}</h2>
+  <p>{{ t("transfer.views_export_desc") }}</p>
+  <a href="/api/views/export" class="btn">{{ t("transfer.views_export_button") }}</a>
+</section>
+
+<section class="card">
+  <h2>{{ t("transfer.views_import") }}</h2>
+  <p>{{ t("transfer.views_import_desc") }}</p>
+  <form method="post" action="/transfer/views-import" enctype="multipart/form-data" class="form-row">
+    <input type="file" name="file" accept=".json" required>
+    <button type="submit">{{ t("transfer.views_import_button") }}</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>{{ t("transfer.snapshots") }}</h2>
+  <p>
+    {{ t("transfer.snapshots_desc") }}
+    {% if snap_enabled %}
+      <span class="badge badge-ok">{{ t("transfer.snapshots_enabled") }}</span>
+    {% else %}
+      <span class="badge">{{ t("transfer.snapshots_disabled") }}</span>
+    {% endif %}
+  </p>
+  <form method="post" action="/transfer/snapshots/trigger" style="margin-bottom:1rem">
+    <button type="submit">{{ t("transfer.snapshot_trigger") }}</button>
+  </form>
+  {% if snapshots %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>{{ t("transfer.snapshot_name") }}</th>
+        <th>{{ t("transfer.snapshot_size") }}</th>
+        <th>{{ t("transfer.snapshot_created") }}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in snapshots %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td>{{ "%.1f"|format(s.size / 1024) }} KB</td>
+        <td>{{ s.created_at }}</td>
+        <td>
+          <form method="post" action="/transfer/snapshots/{{ s.name }}/delete" style="display:inline">
+            <button type="submit" class="btn-danger">{{ t("transfer.snapshot_delete") }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">{{ t("transfer.snapshots_empty") }}</p>
+  {% endif %}
+</section>
+{% endblock %}

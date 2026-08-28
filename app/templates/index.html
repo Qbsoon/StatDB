@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <h1>{{ t("index.hello") }}</h1>
+  <p class="tagline">{{ t("index.tagline") }}</p>
+  <p class="muted">{{ t("index.next") }}</p>
+  <a class="cta" href="{{ url_for('web.datasets') }}">{{ t("index.cta") }}</a>
+</section>
+{% endblock %}

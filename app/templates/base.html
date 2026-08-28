@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="{{ lang }}" data-theme="dark" data-accent="blue">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <script>
+    (function () {
+      var d = document.documentElement;
+      d.setAttribute("data-theme", localStorage.getItem("statdb-theme") || "dark");
+      d.setAttribute("data-accent", localStorage.getItem("statdb-accent") || "blue");
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('web.index') }}">{{ app_name }}</a>
+    <nav class="topnav">
+      <a href="{{ url_for('web.datasets') }}">{{ t("nav.datasets") }}</a>
+      <a href="{{ url_for('web.views') }}">{{ t("nav.views") }}</a>
+      <a href="/transfer">{{ t("nav.transfer") }}</a>
+    </nav>
+    {% if g.statdb_has_password %}
+    <form method="post" action="/logout" class="auth-logout-form">
+      <button type="submit" class="auth-logout-btn">{{ t("auth.logout") }}</button>
+    </form>
+    {% endif %}
+    <div class="theme-switch" aria-label="theme & accent">
+      <button type="button" class="theme-btn" data-set-theme="dark" title="dark">&#9789;</button>
+      <button type="button" class="theme-btn" data-set-theme="light" title="light">&#9728;</button>
+      <span class="accent-dots">
+        <button type="button" class="dot" data-set-accent="blue" style="--dot:#4f8cff" title="blue"></button>
+        <button type="button" class="dot" data-set-accent="green" style="--dot:#2fbf71" title="green"></button>
+        <button type="button" class="dot" data-set-accent="amber" style="--dot:#e0a03c" title="amber"></button>
+      </span>
+    </div>
+    <div class="lang-switch" aria-label="language">
+      {% if lang != "en" %}<a href="{{ url_for('web.set_language_cookie', lang='en', next=request.path) }}">EN</a>{% endif %}
+      {% if lang != "pl" %}<a href="{{ url_for('web.set_language_cookie', lang='pl', next=request.path) }}">PL</a>{% endif %}
+    </div>
+  </header>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      function apply(name, key) {
+        var v = localStorage.getItem(name) || root.getAttribute("data-" + key);
+        root.setAttribute("data-" + key, v);
+        document.querySelectorAll("[data-set-" + key + "]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-set-" + key) === v);
+        });
+      }
+      function applyAll() {
+        apply("statdb-theme", "theme");
+        apply("statdb-accent", "accent");
+      }
+      document.addEventListener("click", function (ev) {
+        var t = ev.target.closest("[data-set-theme],[data-set-accent]");
+        if (!t) return;
+        var key = t.hasAttribute("data-set-theme") ? "theme" : "accent";
+        localStorage.setItem("statdb-" + key, t.getAttribute("data-set-" + key));
+        applyAll();
+      });
+      applyAll();
+    })();
+  </script>
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    {{ t("footer.powered") }} · v{{ statdb_version }}
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

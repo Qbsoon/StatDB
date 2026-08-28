@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-accent="blue">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ view.name }} — StatDB (public)</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/gridstack.min.css') }}">
+  {% if view.settings and view.settings.custom_css %}
+  <style id="view-custom-css">{{ view.settings.custom_css | safe }}</style>
+  {% endif %}
+  <script>
+    (function () {
+      var d = document.documentElement;
+      d.setAttribute("data-theme", localStorage.getItem("statdb-theme") || "dark");
+      d.setAttribute("data-accent", localStorage.getItem("statdb-accent") || "blue");
+    })();
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">StatDB</span>
+    <span class="public-badge" style="margin-left:auto;opacity:.6;font-size:.85em">read-only</span>
+  </header>
+  <main class="content">
+    <h1>{{ view.name }}</h1>
+    <div id="grid-stack" class="grid-stack" style="min-height:400px">
+      {% for w in view.widgets %}
+      <div class="grid-stack-item" data-gs-id="{{ w.id }}"
+           data-gs-x="{{ w.x }}" data-gs-y="{{ w.y }}"
+           data-gs-w="{{ w.w }}" data-gs-h="{{ w.h }}">
+        <div class="grid-stack-item-content widget-body">
+          <div class="widget-header"><span>{{ w.title }}</span></div>
+          <div class="widget-renderer" id="w-{{ w.id }}"
+               data-type="{{ w.type }}"
+               data-config='{{ w.config | tojson }}'
+               data-widget-id="{{ w.id }}"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </main>
+  <script src="{{ url_for('static', filename='js/gridstack.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/widget_renderers.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/public_view.js') }}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var settings = {{ (view.settings or {}) | tojson }};
+      if (window.GridStack) {
+        var grid = window.GridStack.init({staticGrid: true, column: 12, cellHeight: 60}, '#grid-stack');
+      }
+      if (window.StatDBRenderers) {
+        document.querySelectorAll('.widget-renderer').forEach(function (el) {
+          var type = el.getAttribute('data-type');
+          var config = {};
+          try { config = JSON.parse(el.getAttribute('data-config') || '{}'); } catch (e) {}
+          window.StatDBRenderers.render(type, el, {config: config, widget_id: el.getAttribute('data-widget-id')});
+        });
+      }
+      // Auto-refresh
+      if (settings.refresh && settings.refresh > 0) {
+        setInterval(function () {
+          document.querySelectorAll('.widget-renderer').forEach(function (el) {
+            var type = el.getAttribute('data-type');
+            var config = {};
+            try { config = JSON.parse(el.getAttribute('data-config') || '{}'); } catch (e) {}
+            el.innerHTML = '';
+            window.StatDBRenderers.render(type, el, {config: config, widget_id: el.getAttribute('data-widget-id')});
+          });
+        }, settings.refresh * 1000);
+      }
+      // Kiosk mode via URL param
+      if (new URLSearchParams(location.search).get('kiosk') === '1' || settings.kiosk) {
+        document.body.classList.add('kiosk-mode');
+      }
+    });
+  </script>
+</body>
+</html>

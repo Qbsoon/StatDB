@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ view.name }} · {{ app_name }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gridstack.min.css') }}">
+{% if view.settings and view.settings.custom_css %}
+<style id="view-custom-css">{{ view.settings.custom_css | safe }}</style>
+{% endif %}
+{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('web.views') }}">{{ t("views.back") }}</a> · <button type="button" id="kiosk-toggle" class="btn-link">{{ t("views.kiosk_btn") }}</button></p>
+<h1>{{ view.name }}</h1>
+{% if g.statdb_has_password %}
+<p class="public-link-row">
+  <a href="/public/views/{{ view.id }}" target="_blank">{{ t("auth.public_link") }}</a>
+</p>
+{% endif %}
+
+<div id="view-config"
+     data-view-id="{{ view.id }}"
+     data-confirm-delete="{{ t('views.widget_confirm_delete') | tojson }}"
+     data-layout-url="{{ url_for('web.views_layout_save', view_id=view.id) }}"
+     data-settings='{{ (view.settings or {}) | tojson }}'
+     data-kiosk-exit="{{ t('views.kiosk_exit') }}"></div>
+
+{% if not view.widgets %}
+  <p class="muted">{{ t("views.no_widgets") }}</p>
+{% endif %}
+
+<div class="grid-stack" id="grid">
+  {% for w in view.widgets %}
+    <div class="grid-stack-item" gs-id="{{ w.id }}" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}">
+      <div class="grid-stack-item-content">
+        <section class="widget" data-widget-type="{{ w.type }}" data-widget-config='{{ w.config | tojson }}'>
+          <header class="widget-header" title="{{ t('views.widget_drag_hint') }}">
+            <span class="widget-title">{{ w.title or t("views.widget_title_fallback") }}</span>
+            <span class="widget-type">{{ w.type }}</span>
+            <button type="button" class="widget-edit widget-icon" title="{{ t('views.widget_edit') }}">&#9998;</button>
+            <button type="button" class="widget-delete widget-icon danger" title="{{ t('views.widget_delete') }}">&#10005;</button>
+          </header>
+          <div class="widget-body">
+            <div class="placeholder-note" data-widget-placeholder>{{ t("views.widget_placeholder") }}</div>
+            <div data-widget-body></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<h2>{{ t("views.add_widget") }}</h2>
+<form id="widget-create-form" method="post" action="{{ url_for('web.widget_create', view_id=view.id, next=request.path) }}" class="form-grid cols">
+  <label>
+    {{ t("views.add_widget_type") }}
+    <select name="type">
+      {% for wtype in widget_types %}
+        <option value="{{ wtype }}">{{ wtype }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    {{ t("views.add_widget_title") }}
+    <input name="title">
+  </label>
+  <label>
+    {{ t("views.add_widget_dataset") }}
+    <select name="dataset_id">
+      <option value=""></option>
+      {% for ds in datasets %}
+        <option value="{{ ds.id }}">{{ ds.name }} ({{ ds.slug }})</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    {{ t("views.add_widget_column") }}
+    <input name="column">
+  </label>
+  <button type="submit">{{ t("records.add_btn") }}</button>
+</form>
+
+<div id="widget-edit-section" hidden>
+  <h2>{{ t("views.edit_widget") }}</h2>
+  <form id="widget-edit-form" method="post" action="{{ url_for('web.widget_update', view_id=view.id, widget_id=0, next=request.path) }}" class="form-grid cols">
+    <label>
+      {{ t("views.add_widget_title") }}
+      <input name="title" id="widget-edit-title">
+    </label>
+    <label>
+      {{ t("dataset.column_config") }}
+      <textarea name="config" id="widget-edit-config" class="mono" rows="4"></textarea>
+    </label>
+    <div>
+      <button type="submit">{{ t("dataset.save") }}</button>
+      <button type="button" id="widget-edit-cancel">{{ t("datasets.cancel_btn") }}</button>
+    </div>
+  </form>
+</div>
+
+<h2>{{ t("views.settings") }}</h2>
+<form id="view-settings-form" method="post" action="{{ url_for('web.view_settings_save', view_id=view.id) }}" class="form-grid cols">
+  <label>
+    {{ t("views.custom_css") }}
+    <textarea name="custom_css" class="mono" rows="6" placeholder="{{ t('views.custom_css_hint') }}">{{ (view.settings or {}).get('custom_css', '') }}</textarea>
+  </label>
+  <label>
+    {{ t("views.refresh") }}
+    <input type="number" name="refresh" min="0" max="3600" value="{{ (view.settings or {}).get('refresh', 0) }}">
+  </label>
+  <label>
+    <input type="checkbox" name="kiosk" value="1" {% if (view.settings or {}).get('kiosk') %}checked{% endif %}>
+    {{ t("views.kiosk") }}
+  </label>
+  <div>
+    <button type="submit">{{ t("views.save_settings") }}</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/gridstack.js') }}"></script>
+<script src="{{ url_for('static', filename='js/widget_renderers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/view_dashboard.js') }}"></script>
+{% endblock %}

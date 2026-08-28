@@ -1,0 +1,29 @@
+{# Field widgets for the records table. Inputs bind to a form placed
+   outside the table via the HTML `form` attribute. #}
+{% macro field(col, value, form_id) -%}
+{%- set cfg = col.config or {} -%}
+{%- if col.type == "formula" -%}
+  <code class="muted">{{ value if value is not none else "—" }}</code>
+{%- elif col.type == "bool" -%}
+  <input type="checkbox" name="{{ col.key }}" form="{{ form_id }}"{% if value %} checked{% endif %}>
+{%- elif col.type == "select" -%}
+  <select name="{{ col.key }}" form="{{ form_id }}">
+    <option value=""></option>
+    {%- for opt in cfg.get("options", []) %}
+    <option value="{{ opt.key }}"{% if value == opt.key %} selected{% endif %}>{{ (opt.label or {}).get(lang, opt.key) }}</option>
+    {%- endfor %}
+  </select>
+{%- elif col.type in ("integer", "year") -%}
+  <input type="number" step="1" name="{{ col.key }}" form="{{ form_id }}" value="{{ value if value is not none else '' }}">
+{%- elif col.type in ("float", "currency") -%}
+  <input type="number" step="any" name="{{ col.key }}" form="{{ form_id }}" value="{{ value if value is not none else '' }}">
+{%- elif col.type in ("date", "date-long") -%}
+  <input type="date" name="{{ col.key }}" form="{{ form_id }}" value="{{ value if value is not none else '' }}">
+{%- elif col.type == "datetime" -%}
+  <input type="datetime-local" step="1" name="{{ col.key }}" form="{{ form_id }}" value="{{ value if value is not none else '' }}">
+{%- elif col.type == "year-month" -%}
+  <input type="text" name="{{ col.key }}" form="{{ form_id }}" placeholder="{{ cfg.get('input_format', 'MM-YYYY') }}" value="{{ value if value is not none else '' }}">
+{%- else -%}
+  <input type="text" name="{{ col.key }}" form="{{ form_id }}" value="{{ value if value is not none else '' }}">
+{%- endif -%}
+{%- endmacro %}

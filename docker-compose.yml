@@ -1,0 +1,21 @@
+services:
+  statdb:
+    build: .
+    image: statdb:latest
+    container_name: statdb
+    restart: unless-stopped
+    ports:
+      - "${STATDB_PORT:-5000}:5000"
+    environment:
+      STATDB_HOST: 0.0.0.0
+      STATDB_PORT: 5000
+      STATDB_DATA_DIR: /app/data
+      STATDB_LANGUAGE: "${STATDB_LANGUAGE:-en}"
+      STATDB_PASSWORD: "${STATDB_PASSWORD:-}"
+      STATDB_API_TOKEN: "${STATDB_API_TOKEN:-}"
+      STATDB_SECRET_KEY: "${STATDB_SECRET_KEY:-}"
+      STATDB_SNAPSHOT_ENABLED: "${STATDB_SNAPSHOT_ENABLED:-0}"
+      STATDB_SNAPSHOT_INTERVAL: "${STATDB_SNAPSHOT_INTERVAL:-86400}"
+      STATDB_SNAPSHOT_RETENTION: "${STATDB_SNAPSHOT_RETENTION:-7}"
+    volumes:
+      - ./data:/app/data

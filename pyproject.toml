@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "statdb"
+version = "0.1.0"
+description = "Universal, self-hosted app for logging data and building reporting dashboards"
+readme = "README.md"
+# Tested on 3.14.7 only
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "StatDB contributors" }]
+dependencies = [
+    "quart>=0.19.6,<0.21",
+    "hypercorn>=0.17,<0.18",
+    "aiosqlite>=0.20,<0.21",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.24,<0.27",
+    "ruff>=0.6",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["templates/**", "static/**"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]  # allow `pytest` straight from a fresh venv, without install
+filterwarnings = [
+    "error",  # surface warnings from OUR code early
+    # pytest-asyncio 0.26 internals trigger DeprecationWarnings on Python 3.14;
+    # fixed upstream, irrelevant to our codebase — keep output clean meanwhile.
+    'ignore:.asyncio.+event_loop_policy.+ is deprecated:DeprecationWarning:pytest_asyncio',
+]
+
+[tool.ruff]
+line-length = 100

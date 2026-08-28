@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ t("datasets.title") }} · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ t("datasets.title") }}</h1>
+
+<p><a href="/transfer" class="btn">{{ t("transfer.title") }}</a></p>
+
+{% if not datasets %}
+  <p class="muted">{{ t("datasets.empty") }}</p>
+{% else %}
+  <ul class="dataset-list">
+    {% for ds in datasets %}
+      <li class="dataset-card">
+        <a class="dataset-name" href="{{ url_for('web.dataset_detail', dataset_id=ds.id) }}">{{ ds.name }}</a>
+        <span class="dataset-slug">{{ ds.slug }}</span>
+        {% if ds.description %}<p class="muted">{{ ds.description }}</p>{% endif %}
+        <span class="muted small">{{ t("datasets.columns_count", count=ds.columns|length) }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+<h2>{{ t("datasets.new") }}</h2>
+<form method="post" action="{{ url_for('web.dataset_create') }}" class="form-grid">
+  <label>
+    {{ t("dataset.slug") }}
+    <input name="slug" required pattern="[a-z][a-z0-9_]*" title="{{ t('datasets.slug_hint') }}">
+  </label>
+  <label>
+    {{ t("dataset.column_label") }}
+    <input name="name" required>
+  </label>
+  <label>
+    {{ t("dataset.description") }}
+    <input name="description">
+  </label>
+  <button type="submit">{{ t("datasets.create_btn") }}</button>
+</form>
+
+<h2>{{ t("datasets.months_preset") }}</h2>
+<p class="muted small">{{ t("datasets.months_hint") }}</p>
+<form method="post" action="{{ url_for('web.dataset_months_preset') }}">
+  <button type="submit">{{ t("datasets.months_preset") }}</button>
+</form>
+{% endblock %}
