@@ -1,6 +1,6 @@
 services:
   statdb:
-    image: qbsoon/statdb:latest
+    image: qbsoon/stat-db:latest
     container_name: statdb
     restart: unless-stopped
     ports:
