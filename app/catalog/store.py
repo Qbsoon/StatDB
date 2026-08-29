@@ -1,4 +1,4 @@
-"""Catalog repository: CRUD for datasets & columns, preset generator.
+"""Catalog repository: CRUD for datasets & columns.
 
 All writes to catalog tables go through this module; the physical table
 managers in :mod:`app.catalog.migrations` are called when schema changes.
@@ -170,32 +170,3 @@ class CatalogStore:
             await phys.drop_physical_column(self.db, dataset, row_to_dict(row))
         await self.db.execute("UPDATE columns SET position = position - 1 WHERE dataset_id = ? AND position > (SELECT position FROM columns WHERE id = ?)", (row["dataset_id"], column_id))
         await self.db.execute("DELETE FROM columns WHERE id = ?", (column_id,))
-
-    # ---------- preset "Miesiące" ----------
-
-    async def create_months_preset(self, year_from: int = 2020, year_to: int = 2030) -> dict[str, Any]:
-        """Generate a dataset 'months' with year-month values."""
-        ds = await self.get_dataset(slug="months")
-        if ds:
-            return ds
-        ds = await self.create_dataset("months", "Months", "Preset year-month axis")
-        await self.add_column(
-            ds["id"],
-            key="month",
-            label="Month",
-            type_key="year-month",
-            config={"input_format": "MM-YYYY"},
-            position=1,
-        )
-        rows = []
-        for y in range(year_from, year_to + 1):
-            for m in range(1, 13):
-                rows.append((f"{m:02d}-{y}", y * 100 + m))
-        # insert into physical table directly (F3 will expose rows API)
-        table = phys.physical_table_name(ds["slug"])
-        async with self.db.connect() as conn:
-            await conn.executemany(
-                f'INSERT INTO "{table}" (month, "month__sort_key") VALUES (?, ?)', rows
-            )
-            await conn.commit()
-        return ds

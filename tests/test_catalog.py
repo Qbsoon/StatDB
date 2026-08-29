@@ -1,9 +1,29 @@
-"""F2: dataset catalog — datasets CRUD, columns, types, physical tables, preset."""
+"""F2: dataset catalog — datasets CRUD, columns, types, physical tables."""
 from __future__ import annotations
 
 import pytest
 
-from app.catalog.types import COLUMN_TYPES, get_type
+from app.catalog.types import COLUMN_TYPES, get_type, option_label
+
+
+def test_option_label_string():
+    """Plain string labels are returned directly (point 5)."""
+    assert option_label({"key": "a", "label": "Apple"}) == "Apple"
+    assert option_label({"key": "a", "label": ""}) == ""
+
+
+def test_option_label_dict():
+    """Dict labels resolve by lang, falling back to en then key."""
+    assert option_label({"key": "a", "label": {"en": "Apple", "pl": "Jabłko"}}, "pl") == "Jabłko"
+    assert option_label({"key": "a", "label": {"en": "Apple", "pl": "Jabłko"}}, "en") == "Apple"
+    assert option_label({"key": "a", "label": {"en": "Hi"}}, "pl") == "Hi"  # falls back to en
+    assert option_label({"key": "a", "label": {"pl": "Jabłko"}}, "en") == "a"  # no en → falls back to key
+
+
+def test_option_label_missing():
+    """Missing label falls back to the option key."""
+    assert option_label({"key": "a"}) == "a"
+    assert option_label({}) == ""
 
 
 @pytest.fixture
@@ -73,18 +93,6 @@ async def test_year_month_shadow_column(catalog_db):
     assert "month__sort_key" in names
     type_map = {r["name"]: r["type"] for r in tinfo}
     assert type_map["month__sort_key"] == "INTEGER"
-
-
-async def test_months_preset_generation(catalog_db):
-    from app.catalog.store import CatalogStore
-
-    store = CatalogStore(catalog_db)
-    ds = await store.create_months_preset(2024, 2025)  # 2 years
-    assert ds["slug"] == "months"
-    cols = await store.get_columns(ds["id"])
-    assert len(cols) == 1
-    rows = await catalog_db.query_all('SELECT COUNT(*) AS n FROM "data_months"')
-    assert rows[0]["n"] == 24
 
 
 async def test_dataset_delete_cascades_physical(catalog_db):

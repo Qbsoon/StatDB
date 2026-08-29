@@ -124,3 +124,19 @@ def get_type(key: str) -> ColumnType:
     if key not in COLUMN_TYPES:
         raise KeyError(f"Unknown column type: {key}")
     return COLUMN_TYPES[key]
+
+
+def option_label(opt: dict, lang: str = "en") -> str:
+    """Resolve the display label for a select option.
+
+    Supports two label formats:
+      * ``label`` as a plain string  → returned directly
+      * ``label`` as a mapping ``{"en": ..., "pl": ...}`` → resolved by lang
+    Falls back to the option ``key`` when no label is available.
+    """
+    label = opt.get("label")
+    if isinstance(label, str):
+        return label
+    if isinstance(label, dict):
+        return str(label.get(lang) or label.get("en") or opt.get("key") or "")
+    return str(opt.get("key") or "")

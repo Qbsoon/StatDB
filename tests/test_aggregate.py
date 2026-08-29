@@ -146,6 +146,37 @@ async def test_group_select_order_labels(agg_db):
     assert result_pl["items"][0]["label"] == "Umowa"
 
 
+async def test_group_select_string_labels(agg_db):
+    """Select options with plain-string labels resolve correctly (point 5)."""
+    from app.catalog.store import CatalogStore
+    from app.rows.store import RowStore
+
+    store = CatalogStore(agg_db)
+    ds = await store.create_dataset("simple", "Proste")
+    await store.add_column(ds["id"], "kind", "Typ", "select", {
+        "options": [
+            {"key": "s", "label": "Small"},
+            {"key": "l", "label": "Large"},
+        ]
+    }, 1)
+    await store.add_column(ds["id"], "n", "N", "integer", {}, 2)
+    ds = await store.get_dataset(dataset_id=ds["id"])
+    rs = RowStore(agg_db)
+    for kind, n in [("s", 3), ("l", 7), ("s", 2)]:
+        await rs.create_row(ds, {"kind": kind, "n": n})
+    ds = await store.get_dataset(dataset_id=ds["id"])
+
+    from app.aggregation import aggregate
+    result = await aggregate(agg_db, ds, {"measure": "sum", "column": "n", "group_by": "kind"})
+    keys = [it["key"] for it in result["items"]]
+    assert keys == ["s", "l"]
+    assert result["items"][0]["label"] == "Small"
+    assert result["items"][1]["label"] == "Large"
+    # string label used for any lang
+    result_pl = await aggregate(agg_db, ds, {"measure": "sum", "column": "n", "group_by": "kind", "lang": "pl"})
+    assert result_pl["items"][0]["label"] == "Small"
+
+
 # ---------- series (stacked) ----------
 
 

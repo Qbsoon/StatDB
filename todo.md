@@ -242,6 +242,13 @@ PostgreSQL jako backend, multi-user z rolami, raporty e-mail cykliczne, widgety-
 
 ## 15. Sprawy do naprawy, wpisane przez użytkownika
 
+> **Status:** ✅ Wszystkie 5 punktów naprawione.
+> 1. ✅ Language switcher — cookie zapisywany, ikona poprawiona (prior session).
+> 2. ✅ Usunięto wszystkie presety (datasets + column). year-month pozostaje jako typ kolumny w dropdownie.
+> 3. ✅ Usunięto surowy "Config (JSON)" — zastąpiono intuicyjnym GUI per typ kolumny.
+> 4. ✅ Select options konfigurowane przez GUI (dodawanie/usuwanie/przesuwanie, color picker, opcjonalne tłumaczenia EN/PL).
+> 5. ✅ Domyślnie pojedynczy label (string) dla każdej opcji; EN/PL jako opcjonalne tłumaczenia (toggle).
+
 1. Domyślny język to odpowiednio EN, ale w ikonie w górnym prawym rogu pisze "PL" i klikanie w celu zmiany języka tylko odświeża stronę i nic nie robi
 2. Po wejściu w zakładkę "Datasets" widzę "Load Months preset"... Nie powinno być żadnych datasets presets. Na dodawaniu kolumny też nie powinno być "year-month preset"... TO MIAŁ BYĆ RODZAJ KOLUMNY NA LIŚCIE TYPÓW KOLUMN, A NIE JAKIŚ PRESET.
 3. Co to jest "Config (JSON)" na Column Schema??? W ogóle nie wiadomo od czego to jest i nie mam pojęcia jak mam tego użyć, albo czy to w ogóle tam potrzebne.

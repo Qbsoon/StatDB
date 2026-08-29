@@ -7,6 +7,7 @@ import logging
 from quart import Quart
 
 from .config import Config
+from .catalog.types import option_label
 
 __version__ = "0.1.0"
 
@@ -28,7 +29,7 @@ def create_app(config: Config | None = None) -> Quart:
 
     app = Quart(__name__)
     app.config.update(SECRET_KEY=cfg.secret_key, STATDB=cfg)
-    app.jinja_env.globals.update(app_name="StatDB", statdb_version=__version__)
+    app.jinja_env.globals.update(app_name="StatDB", statdb_version=__version__, option_label=option_label)
 
     from .api import bp as api_bp
     from .web import bp as web_bp

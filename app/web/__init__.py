@@ -18,6 +18,7 @@ from quart import (
 from typing import Any
 
 from ..catalog.store import CatalogStore
+from ..catalog.types import COLUMN_TYPES
 from ..db import get_db
 from ..i18n import COOKIE_NAME, SUPPORTED, make_translator, resolve_language
 from ..rows.store import RowStore
@@ -199,7 +200,13 @@ async def dataset_detail(dataset_id: int):
     if not ds:
         abort(404)
     rows = await RowStore(db).list_rows(ds, page=1, page_size=500)
-    return await render_template("dataset.html", dataset=ds, rows=rows)
+    lang = g.get("lang", "en")
+    column_types = [
+        {"key": k, "label": ct.label.get(lang, ct.label.get("en", k))}
+        for k, ct in COLUMN_TYPES.items()
+    ]
+    type_labels = {k: ct.label.get(lang, ct.label.get("en", k)) for k, ct in COLUMN_TYPES.items()}
+    return await render_template("dataset.html", dataset=ds, rows=rows, column_types=column_types, type_labels=type_labels)
 
 
 # ---------- dataset forms (F6) ----------
@@ -228,13 +235,6 @@ async def dataset_create():
     return redirect(f"/datasets/{ds['id']}")
 
 
-@bp.post("/datasets/presets/months")
-async def dataset_months_preset():
-    store, _ = await _form_catalog()
-    ds = await store.create_months_preset()
-    return redirect(f"/datasets/{ds['id']}")
-
-
 @bp.post("/datasets/<int:dataset_id>/columns")
 async def column_add(dataset_id: int):
     store, form = await _form_catalog()
@@ -254,25 +254,6 @@ async def column_add(dataset_id: int):
         )
     except (ValueError, KeyError):
         pass  # invalid key/type/duplicate — stay on page
-    return redirect(_safe_next(f"/datasets/{dataset_id}"))
-
-
-@bp.post("/datasets/<int:dataset_id>/columns/preset-month")
-async def column_month_preset(dataset_id: int):
-    """Add a ready-made year-month 'month' column (MM-YYYY) if missing."""
-    store, _ = await _form_catalog()
-    ds = await store.get_dataset(dataset_id=dataset_id)
-    if not ds:
-        abort(404)
-    if not any(c["key"] == "month" for c in ds["columns"]):
-        label = "Miesiąc" if g.get("lang", "en") == "pl" else "Month"
-        await store.add_column(
-            dataset_id,
-            key="month",
-            label=label,
-            type_key="year-month",
-            config={"input_format": "MM-YYYY"},
-        )
     return redirect(_safe_next(f"/datasets/{dataset_id}"))
 
 

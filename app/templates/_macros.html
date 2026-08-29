@@ -10,7 +10,7 @@
   <select name="{{ col.key }}" form="{{ form_id }}">
     <option value=""></option>
     {%- for opt in cfg.get("options", []) %}
-    <option value="{{ opt.key }}"{% if value == opt.key %} selected{% endif %}>{{ (opt.label or {}).get(lang, opt.key) }}</option>
+    <option value="{{ opt.key }}"{% if value == opt.key %} selected{% endif %}>{{ option_label(opt, lang) }}</option>
     {%- endfor %}
   </select>
 {%- elif col.type in ("integer", "year") -%}
@@ -25,5 +25,86 @@
   <input type="text" name="{{ col.key }}" form="{{ form_id }}" placeholder="{{ cfg.get('input_format', 'MM-YYYY') }}" value="{{ value if value is not none else '' }}">
 {%- else -%}
   <input type="text" name="{{ col.key }}" form="{{ form_id }}" value="{{ value if value is not none else '' }}">
+{%- endif -%}
+{%- endmacro %}
+
+{# ---- Column configuration editor (type-specific GUI, no raw JSON) ---- #}
+
+{% macro option_row(opt, form_id, lang) -%}
+{%- set lbl = opt.get("label") -%}
+{%- set is_dict = lbl is mapping -%}
+<div class="cfg-option-row" data-option data-key="{{ opt.get("key", "") }}">
+  <button type="button" class="cfg-move" data-move="up" title="▲">▲</button>
+  <button type="button" class="cfg-move" data-move="down" title="▼">▼</button>
+  <input type="text" class="cfg-opt-label" form="{{ form_id }}" placeholder="{{ t('dataset.cfg_option_label') }}" value="{% if is_dict %}{{ lbl.get(lang) or lbl.get('en') or '' }}{% else %}{{ lbl or '' }}{% endif %}">
+  <input type="text" class="cfg-opt-en cfg-trans" form="{{ form_id }}" placeholder="EN" value="{% if is_dict %}{{ lbl.get('en', '') }}{% endif %}">
+  <input type="text" class="cfg-opt-pl cfg-trans" form="{{ form_id }}" placeholder="PL" value="{% if is_dict %}{{ lbl.get('pl', '') }}{% endif %}">
+  <label class="cfg-opt-color-wrap" title="{{ t('dataset.cfg_color') }}">
+    <input type="checkbox" class="cfg-opt-has-color"{% if opt.get("color") %} checked{% endif %}>
+    <input type="color" class="cfg-opt-color" form="{{ form_id }}" value="{{ opt.get('color', '#4f8cff') }}">
+  </label>
+  <button type="button" class="cfg-remove" data-remove-option title="{{ t('dataset.delete') }}">✕</button>
+</div>
+{%- endmacro %}
+
+{# Render the hidden config JSON input for a form. Rendered once per form. #}
+{% macro config_hidden(form_id, cfg) -%}
+<input type="hidden" name="config" form="{{ form_id }}" data-config-input data-form="{{ form_id }}" value="{{ (cfg or {}) | tojson }}">
+{%- endmacro %}
+
+{# Render the type-specific configuration section for one column type. #}
+{% macro config_section(ty, cfg, form_id, lang) -%}
+{%- set cfg = cfg or {} -%}
+{%- if ty == "select" -%}
+{%- set ns = namespace(had_dict=false) -%}
+{%- for opt in cfg.get("options", []) -%}{%- if opt.get("label") is mapping -%}{%- set ns.had_dict = true -%}{%- endif -%}{%- endfor -%}
+<div class="cfg-block" data-config-type="select" data-form="{{ form_id }}" data-next-key="{{ (cfg.get("options", []) | length) + 1 }}" data-label-ph="{{ t('dataset.cfg_option_label') }}" data-del-title="{{ t('dataset.delete') }}">
+  <div class="cfg-options" data-options-list>
+    {%- for opt in cfg.get("options", []) %}
+    {{ option_row(opt, form_id, lang) }}
+    {%- endfor %}
+  </div>
+  <div class="cfg-options-toolbar">
+    <button type="button" class="cfg-add-option" data-add-option>{{ t("dataset.cfg_add_option") }}</button>
+    <label class="cfg-translations-toggle small">
+      <input type="checkbox" data-translations-toggle{% if ns.had_dict %} checked{% endif %}>
+      {{ t("dataset.cfg_translations") }}
+    </label>
+  </div>
+</div>
+{%- elif ty == "currency" -%}
+<div class="cfg-block" data-config-type="currency" data-form="{{ form_id }}">
+  <label class="cfg-inline">{{ t("dataset.cfg_currency_code") }}
+    <input type="text" maxlength="3" form="{{ form_id }}" data-cfg="currency_code" value="{{ cfg.get('currency_code', '') }}" placeholder="PLN">
+  </label>
+</div>
+{%- elif ty == "formula" -%}
+<div class="cfg-block" data-config-type="formula" data-form="{{ form_id }}">
+  <label class="cfg-inline">{{ t("dataset.cfg_expression") }}
+    <input type="text" form="{{ form_id }}" data-cfg="expression" value="{{ cfg.get('expression', '') }}" placeholder="amount * 0.23">
+  </label>
+  <p class="muted small">{{ t("dataset.cfg_expression_hint") }}</p>
+</div>
+{%- elif ty == "year-month" -%}
+<div class="cfg-block" data-config-type="year-month" data-form="{{ form_id }}">
+  <label class="cfg-inline">{{ t("dataset.cfg_input_format") }}
+    <select form="{{ form_id }}" data-cfg="input_format">
+      <option value="MM-YYYY"{% if cfg.get('input_format', 'MM-YYYY') == 'MM-YYYY' %} selected{% endif %}>MM-YYYY</option>
+      <option value="MM.YYYY"{% if cfg.get('input_format') == 'MM.YYYY' %} selected{% endif %}>MM.YYYY</option>
+    </select>
+  </label>
+</div>
+{%- elif ty == "text" -%}
+<div class="cfg-block" data-config-type="text" data-form="{{ form_id }}">
+  <label class="cfg-inline">{{ t("dataset.cfg_max_length") }}
+    <input type="number" min="1" form="{{ form_id }}" data-cfg="max_length" value="{{ cfg.get('max_length', '') }}">
+  </label>
+</div>
+{%- elif ty == "float" -%}
+<div class="cfg-block" data-config-type="float" data-form="{{ form_id }}">
+  <label class="cfg-inline">{{ t("dataset.cfg_precision") }}
+    <input type="number" min="0" max="10" form="{{ form_id }}" data-cfg="precision" value="{{ cfg.get('precision', '') }}">
+  </label>
+</div>
 {%- endif -%}
 {%- endmacro %}

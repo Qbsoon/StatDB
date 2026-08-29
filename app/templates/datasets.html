@@ -36,10 +36,4 @@
   </label>
   <button type="submit">{{ t("datasets.create_btn") }}</button>
 </form>
-
-<h2>{{ t("datasets.months_preset") }}</h2>
-<p class="muted small">{{ t("datasets.months_hint") }}</p>
-<form method="post" action="{{ url_for('web.dataset_months_preset') }}">
-  <button type="submit">{{ t("datasets.months_preset") }}</button>
-</form>
 {% endblock %}

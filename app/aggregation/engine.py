@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..catalog.migrations import physical_table_name
+from ..catalog.types import option_label
 from ..db import Database
 from .filters import build_filters
 
@@ -209,8 +210,7 @@ def _bucket_label(bucket: Any, col: dict[str, Any] | None, lang: str) -> str:
     if col["type"] == "select":
         for opt in (col.get("config") or {}).get("options") or []:
             if opt.get("key") == bucket:
-                labels = opt.get("label") or {}
-                return str(labels.get(lang) or labels.get("en") or bucket)
+                return option_label(opt, lang)
         return str(bucket)
     return str(bucket)
 

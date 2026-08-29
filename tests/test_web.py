@@ -70,7 +70,6 @@ async def test_dataset_detail_page(config, client):
     html = (await resp.get_data()).decode()
     assert "Schemat kolumn" in html
     assert "amount" in html and "Kwota" in html
-    assert "Miesiące" in html  # preset button rendered (i18n formatted)
     resp = await client.get("/datasets/999")
     assert resp.status_code == 404
 
@@ -82,23 +81,23 @@ async def test_schema_editor_forms(config, client):
     # add column via form
     resp = await client.post(f"/datasets/{ds['id']}/columns", form={
         "key": "amount", "label": "Kwota", "type": "currency",
-        "config": '{"currency": "PLN"}',
+        "config": '{"currency_code": "PLN"}',
     }, query_string={"next": f"/datasets/{ds['id']}"})
     assert resp.status_code in (301, 302)
     store, _ = await _store(config)
     ds = await store.get_dataset(slug="earnings")
     col = ds["columns"][0]
     assert col["key"] == "amount" and col["type"] == "currency"
-    assert col["config"] == {"currency": "PLN"}
+    assert col["config"] == {"currency_code": "PLN"}
 
     # update label + config
     resp = await client.post(f"/columns/{col['id']}/update", form={
-        "label": "Kwota netto", "config": '{"currency": "EUR"}',
+        "label": "Kwota netto", "config": '{"currency_code": "EUR"}',
     }, query_string={"next": f"/datasets/{ds['id']}"})
     assert resp.status_code in (301, 302)
     store, _ = await _store(config)
     col = (await store.get_dataset(slug="earnings"))["columns"][0]
-    assert col["label"] == "Kwota netto" and col["config"] == {"currency": "EUR"}
+    assert col["label"] == "Kwota netto" and col["config"] == {"currency_code": "EUR"}
 
     # delete
     resp = await client.post(f"/columns/{col['id']}/delete", query_string={"next": "/datasets"})
@@ -107,33 +106,61 @@ async def test_schema_editor_forms(config, client):
     assert (await store.get_dataset(slug="earnings"))["columns"] == []
 
 
-async def test_month_preset_column(config, client):
+async def test_dataset_detail_type_dropdown(config, client):
+    """Add-column type dropdown lists all real types incl. integer & bool."""
     store, _ = await _store(config)
     ds = await store.create_dataset("earnings", "Zarobki")
+    resp = await client.get(f"/datasets/{ds['id']}")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    assert 'name="type"' in html
+    assert 'value="integer"' in html
+    assert 'value="bool"' in html
+    assert 'value="year-month"' in html
+    assert 'value="select"' in html
+    # no raw JSON config field anywhere on the schema editor
+    assert "Config (JSON)" not in html
+    assert "Konfiguracja (JSON)" not in html
 
-    resp = await client.post(f"/datasets/{ds['id']}/columns/preset-month",
-                             query_string={"next": f"/datasets/{ds['id']}"})
-    assert resp.status_code in (301, 302)
+
+async def test_dataset_detail_select_options_gui(config, client):
+    """Select column renders GUI option editor, not raw JSON."""
     store, _ = await _store(config)
-    cols = (await store.get_dataset(slug="earnings"))["columns"]
-    assert len(cols) == 1
-    assert cols[0]["key"] == "month" and cols[0]["type"] == "year-month"
-    assert cols[0]["config"]["input_format"] == "MM-YYYY"
+    ds = await store.create_dataset("earnings", "Zarobki")
+    await store.add_column(ds["id"], key="source", label="Źródło", type_key="select", config={
+        "options": [
+            {"key": "uop", "label": "Umowa o pracę", "color": "#3b82f6"},
+            {"key": "b2b", "label": {"en": "B2B", "pl": "Faktura B2B"}},
+        ]
+    })
+    resp = await client.get(f"/datasets/{ds['id']}")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    # GUI elements present
+    assert "cfg-option-row" in html
+    assert "data-add-option" in html
+    assert "cfg-translations-toggle" in html
+    # option labels rendered (string label + dict label resolved to current lang)
+    assert "Umowa o pracę" in html
+    # no raw JSON config textarea
+    assert "Config (JSON)" not in html
+    assert "Konfiguracja (JSON)" not in html
 
-    # idempotent: second click adds nothing
-    resp = await client.post(f"/datasets/{(await store.get_dataset(slug='earnings'))['id']}/columns/preset-month")
-    assert resp.status_code in (301, 302)
+
+async def test_select_string_label_in_records(config, client):
+    """Records table renders string labels for select options (point 5)."""
     store, _ = await _store(config)
-    assert len((await store.get_dataset(slug="earnings"))["columns"]) == 1
-
-
-async def test_months_preset_button(config, client):
-    resp = await client.post("/datasets/presets/months")
-    assert resp.status_code in (301, 302)
-    assert "/datasets/" in resp.headers["Location"]
-    store, _ = await _store(config)
-    ds = await store.get_dataset(slug="months")
-    assert ds is not None and ds["columns"][0]["type"] == "year-month"
+    ds = await store.create_dataset("earnings", "Zarobki")
+    await store.add_column(ds["id"], key="source", label="Źródło", type_key="select", config={
+        "options": [{"key": "uop", "label": "Umowa"}, {"key": "b2b", "label": "Faktura"}]
+    })
+    ds = await store.get_dataset(dataset_id=ds["id"])
+    rs = RowStore(Database(config.db_path))
+    await rs.create_row(ds, {"source": "uop"})
+    resp = await client.get(f"/datasets/{ds['id']}")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    assert "Umowa" in html  # string label rendered in <option>
 
 
 async def _seed_records(config):

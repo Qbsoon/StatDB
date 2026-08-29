@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import field with context %}
+{% from "_macros.html" import field, config_hidden, config_section with context %}
 {% block title %}{{ dataset.name }} · {{ app_name }}{% endblock %}
 {% block content %}
 <p><a href="{{ url_for('web.datasets') }}">{{ t("dataset.back") }}</a></p>
@@ -63,41 +63,40 @@
 {% if not dataset.columns %}
   <p class="muted">{{ t("dataset.no_columns") }}</p>
 {% else %}
-  <table class="table">
+  <table class="table schema-table">
     <thead>
       <tr>
         <th>{{ t("dataset.column_key") }}</th>
         <th>{{ t("dataset.column_label") }}</th>
         <th>{{ t("dataset.column_type") }}</th>
-        <th>{{ t("dataset.column_config") }}</th>
+        <th>{{ t("dataset.column_configuration") }}</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       {% for col in dataset.columns %}
         <tr>
-          <form method="post" action="{{ url_for('web.column_update', column_id=col.id, next=request.path) }}">
-            <td><code>{{ col.key }}</code></td>
-            <td><input name="label" value="{{ col.label }}"></td>
-            <td><code class="muted">{{ col.type }}</code></td>
-            <td>
-              <input name="config" value="{{ col.config | tojson }}" class="mono">
-            </td>
-            <td class="actions">
-              <button type="submit" formaction="{{ url_for('web.column_update', column_id=col.id, next=request.path) }}">{{ t("dataset.save") }}</button>
-              <button type="submit" form="del-{{ col.id }}" class="danger"
-                      onclick="return confirm({{ t('dataset.confirm_delete_column', key=col.key) | tojson }})">{{ t("dataset.delete") }}</button>
-            </td>
-          </form>
+          <td><code>{{ col.key }}</code></td>
+          <td><input name="label" form="col-{{ col.id }}" value="{{ col.label }}"></td>
+          <td><code class="muted">{{ type_labels[col.type] if type_labels is defined else col.type }}</code></td>
+          <td class="cfg-cell">{{ config_hidden("col-" ~ col.id, col.config) }}{{ config_section(col.type, col.config, "col-" ~ col.id, lang) }}</td>
+          <td class="actions">
+            <button type="submit" form="col-{{ col.id }}">{{ t("dataset.save") }}</button>
+            <button type="submit" form="del-{{ col.id }}" class="danger"
+                    onclick="return confirm({{ t('dataset.confirm_delete_column', key=col.key) | tojson }})">{{ t("dataset.delete") }}</button>
+          </td>
         </tr>
-        <form id="del-{{ col.id }}" method="post" action="{{ url_for('web.column_delete', column_id=col.id, next=request.path) }}"></form>
       {% endfor %}
     </tbody>
   </table>
+  {% for col in dataset.columns %}
+    <form id="col-{{ col.id }}" method="post" action="{{ url_for('web.column_update', column_id=col.id, next=request.path) }}"></form>
+    <form id="del-{{ col.id }}" method="post" action="{{ url_for('web.column_delete', column_id=col.id, next=request.path) }}"></form>
+  {% endfor %}
 {% endif %}
 
 <h3>{{ t("dataset.add_column") }}</h3>
-<form method="post" action="{{ url_for('web.column_add', dataset_id=dataset.id, next=request.path) }}" class="form-grid cols">
+<form id="col-add" method="post" action="{{ url_for('web.column_add', dataset_id=dataset.id, next=request.path) }}" class="form-grid cols">
   <label>{{ t("dataset.column_key") }}
     <input name="key" required pattern="[a-z][a-z0-9_]*">
   </label>
@@ -105,21 +104,24 @@
     <input name="label">
   </label>
   <label>{{ t("dataset.column_type") }}
-    <select name="type">
-      {% for ty in ["select","int","float","text","currency","formula","date","date-long","datetime","year","year-month"] %}
-        <option value="{{ ty }}">{{ ty }}</option>
+    <select name="type" data-add-type>
+      {% for ty in column_types %}
+        <option value="{{ ty.key }}">{{ ty.label }}</option>
       {% endfor %}
     </select>
   </label>
-  <label>{{ t("dataset.column_config") }}
-    <input name="config" value='{}' class="mono">
-  </label>
+  <div class="cfg-add-wrapper">
+    {{ config_hidden("col-add", {}) }}
+    <div class="cfg-add-sections" data-add-sections>
+      {% for ty in ["select", "currency", "formula", "year-month", "text", "float"] %}
+        {{ config_section(ty, {}, "col-add", lang) }}
+      {% endfor %}
+    </div>
+  </div>
   <button type="submit">{{ t("datasets.create_btn") }}</button>
 </form>
+{% endblock %}
 
-<h2>{{ t("dataset.preset_months") }}</h2>
-<p class="muted small">{{ t("dataset.preset_hint") }}</p>
-<form method="post" action="{{ url_for('web.column_month_preset', dataset_id=dataset.id, next=request.path) }}">
-  <button type="submit">{{ t("dataset.preset_months") }}</button>
-</form>
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/column_config.js') }}"></script>
 {% endblock %}

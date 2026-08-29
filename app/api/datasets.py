@@ -119,14 +119,3 @@ async def remove_column(column_id: int) -> Any:
         return jsonify({"deleted": column_id})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
-
-
-@bp.post("/datasets/presets/months")
-async def months_preset() -> Any:
-    data = await request.get_json(silent=True) or {}
-    year_from = int(data.get("year_from", 2020))
-    year_to = int(data.get("year_to", 2030))
-    if year_from > year_to or year_to - year_from > 50:
-        return jsonify({"error": "year_from must be ≤ year_to and span ≤ 50 years"}), 400
-    ds = await _store().create_months_preset(year_from, year_to)
-    return jsonify(ds), 201

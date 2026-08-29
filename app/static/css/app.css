@@ -276,3 +276,35 @@ h3 { font-size: 16px; margin: 20px 0 8px; }
 .kiosk-mode main { padding: 16px; }
 .kiosk-mode .grid-stack { min-height: calc(100vh - 40px); }
 .kiosk-mode .widget-header { cursor: default; }
+
+/* ---------- column configuration editor ---------- */
+.cfg-block { display: flex; flex-direction: column; gap: 6px; }
+.cfg-inline { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; }
+.cfg-inline input, .cfg-inline select { width: auto; min-width: 7rem; }
+
+.cfg-options { display: flex; flex-direction: column; gap: 4px; }
+.cfg-option-row {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  padding: 2px 0;
+}
+.cfg-option-row .cfg-move {
+  padding: 1px 5px; line-height: 1; font-size: .7rem;
+  background: var(--bg-softer); border: 1px solid var(--line); color: var(--fg-muted);
+  border-radius: 4px; cursor: pointer;
+}
+.cfg-option-row .cfg-move:hover { color: var(--fg); }
+.cfg-opt-label { flex: 1 1 12rem; min-width: 8rem; }
+.cfg-opt-en, .cfg-opt-pl { width: 6rem; }
+.cfg-opt-color-wrap { display: inline-flex; align-items: center; gap: 2px; }
+.cfg-opt-color-wrap .cfg-opt-color { width: 2rem; height: 1.75rem; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; }
+.cfg-trans { display: none; }
+.cfg-block.show-trans .cfg-trans { display: inline-block; }
+
+.cfg-options-toolbar { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.cfg-add-option { font-size: .85rem; }
+.cfg-translations-toggle { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-muted); cursor: pointer; }
+.cfg-translations-toggle input { margin: 0; }
+
+.schema-table td.cfg-cell { min-width: 16rem; }
+.cfg-add-wrapper { grid-column: 1 / -1; }
+.cfg-add-sections { min-height: 0; }
