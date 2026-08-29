@@ -279,7 +279,12 @@ h3 { font-size: 16px; margin: 20px 0 8px; }
 
 /* ---------- column configuration editor ---------- */
 .cfg-block { display: flex; flex-direction: column; gap: 6px; }
+.cfg-block[hidden] { display: none; }
 .cfg-inline { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; }
+/* In the add-column form all config blocks are hidden by default;
+   JS adds .is-active to the one matching the selected type. */
+.cfg-add-sections .cfg-block { display: none; }
+.cfg-add-sections .cfg-block.is-active { display: flex; }
 .cfg-inline input, .cfg-inline select { width: auto; min-width: 7rem; }
 
 .cfg-options { display: flex; flex-direction: column; gap: 4px; }

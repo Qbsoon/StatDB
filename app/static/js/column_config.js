@@ -80,7 +80,10 @@
   function visibleBlock(formId) {
     var blocks = document.querySelectorAll('.cfg-block[data-form="' + formId + '"]');
     for (var i = 0; i < blocks.length; i++) {
-      if (!blocks[i].hidden) return blocks[i];
+      var b = blocks[i];
+      // Skip blocks inside the add-form that don't have .is-active
+      if (b.closest(".cfg-add-sections") && !b.classList.contains("is-active")) continue;
+      if (!b.hidden) return b;
     }
     return null;
   }
@@ -169,7 +172,7 @@
     var anyVisible = false;
     forEach(wrap.querySelectorAll(".cfg-block"), function (block) {
       var show = block.getAttribute("data-config-type") === ty;
-      block.hidden = !show;
+      block.classList.toggle("is-active", show);
       if (show) anyVisible = true;
     });
     if (!anyVisible) {
