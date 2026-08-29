@@ -6,18 +6,32 @@
 <section class="card">
   <h2>{{ t("transfer.import_data") }}</h2>
   <p>{{ t("transfer.import_data_desc") }}</p>
-  <form method="post" action="/datasets/import" enctype="multipart/form-data" class="form-row">
+  <form method="post" action="/datasets/import" enctype="multipart/form-data" class="form-row" id="import-form">
     <input type="file" name="file" accept=".csv,.json" required>
-    <select name="dataset_id">
+    <select name="dataset_id" id="import-dataset-select">
       <option value="">{{ t("transfer.import_new_dataset") }}</option>
       {% for ds in datasets %}
         <option value="{{ ds.id }}">{{ ds.name }} ({{ ds.slug }})</option>
       {% endfor %}
     </select>
-    <input type="text" name="slug" placeholder="{{ t('transfer.slug_placeholder') }}">
-    <input type="text" name="name" placeholder="{{ t('transfer.name_placeholder') }}">
+    <input type="text" name="slug" id="import-slug" placeholder="{{ t('transfer.slug_placeholder') }}">
+    <input type="text" name="name" id="import-name" placeholder="{{ t('transfer.name_placeholder') }}">
     <button type="submit">{{ t("transfer.import_button") }}</button>
   </form>
+  <script>
+    (function () {
+      var sel = document.getElementById("import-dataset-select");
+      var slug = document.getElementById("import-slug");
+      var name = document.getElementById("import-name");
+      function toggle() {
+        var isNew = !sel.value;
+        slug.style.display = isNew ? "" : "none";
+        name.style.display = isNew ? "" : "none";
+      }
+      sel.addEventListener("change", toggle);
+      toggle();
+    })();
+  </script>
 </section>
 
 <section class="card">
