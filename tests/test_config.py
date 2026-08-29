@@ -16,7 +16,6 @@ def test_defaults(tmp_path, monkeypatch):
     assert cfg.port == 5000
     assert cfg.debug is False
     assert cfg.language == "en"
-    assert cfg.language_forced is False
     assert cfg.password is None  # trusted mode by default
     assert cfg.secret_key  # randomly generated
     assert cfg.data_dir == tmp_path / "data"
@@ -39,7 +38,6 @@ def test_custom_values(tmp_path):
     assert cfg.port == 8080
     assert cfg.debug is True
     assert cfg.language == "pl"
-    assert cfg.language_forced is True
     assert cfg.password == "s3cret"
     assert cfg.secret_key == "fixed"
     assert cfg.db_path == tmp_path / "storage" / "statdb.db"
@@ -47,8 +45,7 @@ def test_custom_values(tmp_path):
 
 def test_invalid_language_falls_back_to_en():
     cfg = Config({"STATDB_LANGUAGE": "klingon"})
-    assert cfg.language == "en"
-    assert cfg.language_forced is False  # invalid value does not force anything
+    assert cfg.language == "en"  # invalid value falls back to the default
 
 
 def test_invalid_port_rejected():

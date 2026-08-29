@@ -238,3 +238,12 @@ PostgreSQL jako backend, multi-user z rolami, raporty e-mail cykliczne, widgety-
    Wszystkie sortują się po rzeczywistej wartości, a nie po sformatowanym tekście.
 
 **Plan zatwierdzony — realizacja od F0.**
+
+
+## 15. Sprawy do naprawy, wpisane przez użytkownika
+
+1. Domyślny język to odpowiednio EN, ale w ikonie w górnym prawym rogu pisze "PL" i klikanie w celu zmiany języka tylko odświeża stronę i nic nie robi
+2. Po wejściu w zakładkę "Datasets" widzę "Load Months preset"... Nie powinno być żadnych datasets presets. Na dodawaniu kolumny też nie powinno być "year-month preset"... TO MIAŁ BYĆ RODZAJ KOLUMNY NA LIŚCIE TYPÓW KOLUMN, A NIE JAKIŚ PRESET.
+3. Co to jest "Config (JSON)" na Column Schema??? W ogóle nie wiadomo od czego to jest i nie mam pojęcia jak mam tego użyć, albo czy to w ogóle tam potrzebne.
+4. Kompletnie nie wiadomo jak aplikacja oczekuje, że poda się opcje do wyboru do kolumny typu select. Jest niby ten config json, ale kompletnie nie wiadomo jak go użyć. Najwygodniej by było móc po prostu wprowadzić opcje poprzez jakiś przycisk "Dodaj", albo w polu tekstowym po przecinkach/średnikach. Ewentualnie jako kolekcja json []. Wszystko musi być intuicyjne, więc najlepiej jakby było konfigurowalne przez GUI, a nie przez jakiś json config.
+5. Do tego wymaganie podawania label-i en i pl to tragedia. To może być jako jakaś bardzo opcjonalna opcja tłumaczenia, ale domyślnie powinno dać się ustawić jeden label dla każdej opcji.

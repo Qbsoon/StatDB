@@ -58,7 +58,7 @@ python run.py     # http://localhost:5000
 | `STATDB_HOST`               | `0.0.0.0`          | Bind host                                            |
 | `STATDB_PORT`               | `5000`             | Bind port                                            |
 | `STATDB_DEBUG`              | `0`                | Debug mode (`1/true/yes/on`)                        |
-| `STATDB_LANGUAGE`           | — (= `en`)         | Force UI language: `en` or `pl`                      |
+| `STATDB_LANGUAGE`           | — (= `en`)         | Default UI language: `en` or `pl` (user can toggle)  |
 | `STATDB_PASSWORD`           | — (none)           | Login password; unset = trusted mode (no login)     |
 | `STATDB_API_TOKEN`          | — (none)           | Bearer token for `/api/*`; unset = open API         |
 | `STATDB_SECRET_KEY`         | random             | Session secret; set to persist sessions across restarts |
@@ -74,7 +74,7 @@ python run.py     # http://localhost:5000
 # Build & run
 docker compose up -d --build
 
-# With auth + Polish UI
+# With auth + Polish UI (default; user can still toggle in-browser)
 STATDB_PASSWORD=secret STATDB_LANGUAGE=pl docker compose up -d --build
 
 # Stop

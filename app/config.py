@@ -44,10 +44,10 @@ class Config:
         self.port = _as_port(env.get("STATDB_PORT"))
         self.debug = _as_bool(env.get("STATDB_DEBUG"))
 
-        # Language: default EN, cookie toggle allowed; env var forces the language.
+        # Language: STATDB_LANGUAGE sets the *default*; the user can always
+        # override it via the language toggle (cookie). It is never forced.
         lang_raw = (env.get("STATDB_LANGUAGE") or "").strip().lower()
-        self.language_forced = lang_raw in SUPPORTED_LANGUAGES
-        self.language = lang_raw if self.language_forced else _FALLBACK_LANGUAGE
+        self.language = lang_raw if lang_raw in SUPPORTED_LANGUAGES else _FALLBACK_LANGUAGE
 
         # Auth: when unset, the instance runs in trusted mode (no login page).
         password = (env.get("STATDB_PASSWORD") or "").strip()

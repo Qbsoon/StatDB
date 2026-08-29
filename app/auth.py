@@ -110,8 +110,7 @@ async def login_page() -> Any:
         from .i18n import make_translator, resolve_language, COOKIE_NAME
         cfg2 = _cfg()
         lang = resolve_language(
-            forced=cfg2.language_forced,
-            env_language=cfg2.language,
+            default_language=cfg2.language,
             cookie_language=request.cookies.get(COOKIE_NAME),
         )
         g.lang = lang
@@ -120,8 +119,7 @@ async def login_page() -> Any:
     from .i18n import make_translator, resolve_language, COOKIE_NAME
     cfg3 = _cfg()
     lang = resolve_language(
-        forced=cfg3.language_forced,
-        env_language=cfg3.language,
+        default_language=cfg3.language,
         cookie_language=request.cookies.get(COOKIE_NAME),
     )
     g.lang = lang

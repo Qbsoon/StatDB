@@ -50,10 +50,9 @@ def create_app(config: Config | None = None) -> Quart:
         start_snapshot_scheduler(app)
 
     app.logger.info(
-        "StatDB %s initialised — language=%s%s, auth=%s, data_dir=%s",
+        "StatDB %s initialised — language=%s (default), auth=%s, data_dir=%s",
         __version__,
         cfg.language,
-        " (forced by env)" if cfg.language_forced else "",
         "password" if cfg.password else "trusted/no-password",
         cfg.data_dir,
     )

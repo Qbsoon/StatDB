@@ -9,7 +9,7 @@ from app.db import Database, run_migrations
 
 @pytest.fixture
 def env(tmp_path):
-    """Hermetic env: isolated data dir, forced Polish UI."""
+    """Hermetic env: isolated data dir, default Polish UI."""
     return {
         "STATDB_DATA_DIR": str(tmp_path / "data"),
         "STATDB_SECRET_KEY": "test-secret",

@@ -32,8 +32,7 @@ _COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 async def pick_language() -> None:
     cfg = current_app.config["STATDB"]
     g.lang = resolve_language(
-        forced=cfg.language_forced,
-        env_language=cfg.language,
+        default_language=cfg.language,
         cookie_language=request.cookies.get(COOKIE_NAME),
     )
     g.t = make_translator(g.lang)
@@ -369,7 +368,7 @@ async def row_delete(dataset_id: int, row_id: int):
 
 @bp.route("/lang/<lang>")
 async def set_language_cookie(lang: str):
-    """Toggle UI language (EN/PL) unless forced by STATDB_LANGUAGE."""
+    """Toggle UI language (EN/PL). The cookie overrides the STATDB_LANGUAGE default."""
     target = request.args.get("next") or "/"
     if not target.startswith("/"):
         target = "/"

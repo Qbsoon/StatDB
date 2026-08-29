@@ -18,7 +18,7 @@ async def test_layout_base(config, client):
     resp = await client.get("/")
     assert resp.status_code == 200
     html = (await resp.get_data()).decode()
-    assert '<html lang="pl"' in html  # conftest forces STATDB_LANGUAGE=pl
+    assert '<html lang="pl"' in html  # conftest sets STATDB_LANGUAGE=pl as default
     assert 'data-theme="dark"' in html  # default theme attribute present
     assert "Zbiory danych" in html  # nav translated
     assert 'href="/lang/en' in html  # language toggle to EN

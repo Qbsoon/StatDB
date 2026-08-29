@@ -22,15 +22,16 @@ def translations(lang: str) -> dict[str, str]:
     return table
 
 
-def resolve_language(*, forced: bool, env_language: str, cookie_language: str | None) -> str:
+def resolve_language(*, default_language: str, cookie_language: str | None) -> str:
     """Pick the UI language for the current request.
 
-    Priority: forced env var > user cookie > default (en).
+    Priority: user cookie > env default (STATDB_LANGUAGE) > "en".
+    The user can always override the default via the language toggle.
     """
-    if forced and env_language in SUPPORTED:
-        return env_language
     if cookie_language in SUPPORTED:
         return cookie_language
+    if default_language in SUPPORTED:
+        return default_language
     return DEFAULT
 
 
