@@ -363,96 +363,48 @@ async def set_language_cookie(lang: str):
 
 import csv as csv_mod
 import io as io_mod
+import json as _json_mod
 from pathlib import Path as _Path
 from quart import send_file, jsonify as _jsonify
 
 
-@bp.post("/datasets/import-csv")
-async def dataset_import_csv():
-    """Upload a CSV file → create dataset with inferred columns + rows."""
-    from ..api.transfer import _infer_type, _coerce_cell
+@bp.post("/datasets/import")
+async def dataset_import():
+    """Upload a CSV or JSON file → create dataset or append to existing dataset."""
+    from ..api.transfer import _import_csv_data, _import_json_data, _derive_slug_name
     files = await request.files
     form = await request.form
     upload = files.get("file")
     if not upload or not upload.filename:
-        return redirect("/datasets")
+        return redirect("/transfer")
+    filename = upload.filename
+    is_json = filename.lower().endswith(".json")
     raw = upload.read().decode("utf-8-sig", errors="replace")
-    reader = csv_mod.reader(io_mod.StringIO(raw))
-    try:
-        header = next(reader)
-    except StopIteration:
-        return redirect("/datasets")
-    header = [h.strip() for h in header]
-    data_rows = list(reader)
-    if not header:
-        return redirect("/datasets")
-
-    import re as _re
-    def _safe_key(h: str) -> str:
-        k = "".join(c if c.isalnum() or c == "_" else "_" for c in h.lower()).strip("_")
-        if k and k[0].isdigit():
-            k = "col_" + k
-        return k or "col"
-
-    keys = [_safe_key(h) for h in header]
-    seen: dict[str, int] = {}
-    for i, k in enumerate(keys):
-        if k in seen:
-            seen[k] += 1
-            keys[i] = f"{k}_{seen[k]}"
-        else:
-            seen[k] = 1
-
-    col_samples: list[list[str]] = [[] for _ in header]
-    for row in data_rows[:200]:
-        for i, cell in enumerate(row[: len(header)]):
-            if cell.strip():
-                col_samples[i].append(cell)
-    from ..api.transfer import _infer_type
-    types = [_infer_type(s) for s in col_samples]
 
     slug = (form.get("slug") or "").strip().lower()
     name = (form.get("name") or "").strip()
-    if not slug:
-        base = _Path(upload.filename).stem
-        slug = "".join(c if c.isalnum() or c == "_" else "_" for c in base.lower()).strip("_")
-        if slug and slug[0].isdigit():
-            slug = "ds_" + slug
-    if not name:
-        name = _Path(upload.filename).stem.replace("_", " ").title() or slug
+    dataset_id = form.get("dataset_id")
+    dataset_id = int(dataset_id) if dataset_id else None
 
-    store = CatalogStore(get_db())
+    if not slug and not dataset_id and not is_json:
+        slug, name = _derive_slug_name(filename)
+    if not name and not dataset_id and not is_json:
+        name = name or slug
+
     try:
-        ds = await store.create_dataset(slug, name)
-    except (ValueError, KeyError):
-        return redirect("/datasets")
+        if is_json:
+            data = _json_mod.loads(raw)
+            result = await _import_json_data(
+                get_db(), data, slug=slug, name=name, dataset_id=dataset_id,
+            )
+        else:
+            result = await _import_csv_data(
+                get_db(), raw, slug=slug, name=name, dataset_id=dataset_id,
+            )
+    except (ValueError, KeyError, _json_mod.JSONDecodeError):
+        return redirect("/transfer")
 
-    for pos, (key, ty) in enumerate(zip(keys, types), 1):
-        label = header[pos - 1] or key
-        config: dict[str, Any] = {}
-        if ty == "year-month":
-            config["input_format"] = "MM-YYYY"
-        try:
-            await store.add_column(ds["id"], key, label, ty, config, pos)
-        except (ValueError, KeyError):
-            continue
-
-    ds = await store.get_dataset(dataset_id=ds["id"])
-    if not ds:
-        return redirect("/datasets")
-
-    from ..api.transfer import _coerce_cell
-    rs = RowStore(get_db())
-    for row in data_rows:
-        values: dict[str, Any] = {}
-        for i, col in enumerate(ds["columns"]):
-            if i < len(row):
-                values[col["key"]] = _coerce_cell(row[i], col["type"])
-        try:
-            await rs.create_row(ds, values)
-        except (ValueError, KeyError):
-            pass
-    return redirect(f"/datasets/{ds['id']}")
+    return redirect(f"/datasets/{result['dataset_id']}")
 
 
 @bp.route("/datasets/<int:dataset_id>/export")
@@ -528,15 +480,18 @@ async def backup_download():
 
 @bp.route("/transfer")
 async def transfer_page():
-    """Settings page: import/export views config, snapshots, backup link."""
+    """Settings page: import/export, views config, snapshots, backup link."""
     from ..snapshots import list_snapshot_files, _is_enabled
     cfg = current_app.config["STATDB"]
     snapshots = list_snapshot_files(cfg)
     snap_enabled = _is_enabled(cfg)
+    store = CatalogStore(get_db())
+    datasets = await store.list_datasets()
     return await render_template(
         "transfer.html",
         snapshots=snapshots,
         snap_enabled=snap_enabled,
+        datasets=datasets,
     )
 
 

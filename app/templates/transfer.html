@@ -4,10 +4,16 @@
 <h1>{{ t("transfer.title") }}</h1>
 
 <section class="card">
-  <h2>{{ t("transfer.import_csv") }}</h2>
-  <p>{{ t("transfer.import_csv_desc") }}</p>
-  <form method="post" action="/datasets/import-csv" enctype="multipart/form-data" class="form-row">
-    <input type="file" name="file" accept=".csv" required>
+  <h2>{{ t("transfer.import_data") }}</h2>
+  <p>{{ t("transfer.import_data_desc") }}</p>
+  <form method="post" action="/datasets/import" enctype="multipart/form-data" class="form-row">
+    <input type="file" name="file" accept=".csv,.json" required>
+    <select name="dataset_id">
+      <option value="">{{ t("transfer.import_new_dataset") }}</option>
+      {% for ds in datasets %}
+        <option value="{{ ds.id }}">{{ ds.name }} ({{ ds.slug }})</option>
+      {% endfor %}
+    </select>
     <input type="text" name="slug" placeholder="{{ t('transfer.slug_placeholder') }}">
     <input type="text" name="name" placeholder="{{ t('transfer.name_placeholder') }}">
     <button type="submit">{{ t("transfer.import_button") }}</button>

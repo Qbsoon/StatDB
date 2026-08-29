@@ -89,49 +89,90 @@ def _coerce_cell(raw: str, type_key: str) -> Any:
     return raw
 
 
+def _safe_key(h: str) -> str:
+    """Sanitise a header string into a valid column key."""
+    k = "".join(c if c.isalnum() or c == "_" else "_" for c in h.lower()).strip("_")
+    if k and k[0].isdigit():
+        k = "col_" + k
+    return k or "col"
+
+
+def _derive_slug_name(filename: str) -> tuple[str, str]:
+    """Derive slug and name from a filename."""
+    base = Path(filename).stem
+    slug = "".join(c if c.isalnum() or c == "_" else "_" for c in base.lower()).strip("_")
+    if slug and slug[0].isdigit():
+        slug = "ds_" + slug
+    name = base.replace("_", " ").title() or slug
+    return slug, name
+
+
 # ---------------------------------------------------------------------------
-# CSV import
+# Shared import helpers (used by both API and web routes)
 # ---------------------------------------------------------------------------
 
-@bp.post("/datasets/import-csv")
-async def import_csv() -> Any:
-    files = await request.files
-    form = await request.form
-    upload = files.get("file")
-    if not upload or not upload.filename:
-        return jsonify({"error": "no file uploaded"}), 400
+async def _import_csv_data(
+    db, raw: str, *, slug: str = "", name: str = "", dataset_id: int | None = None,
+) -> dict[str, Any]:
+    """Import CSV data — create a new dataset or append rows to an existing one.
 
-    slug = (form.get("slug") or "").strip().lower()
-    name = (form.get("name") or "").strip()
-    if not slug:
-        # derive from filename
-        base = Path(upload.filename).stem
-        slug = "".join(c if c.isalnum() or c == "_" else "_" for c in base.lower()).strip("_")
-        if slug and slug[0].isdigit():
-            slug = "ds_" + slug
-    if not name:
-        name = Path(upload.filename).stem.replace("_", " ").title() or slug
-
-    raw = upload.read().decode("utf-8-sig", errors="replace")
+    Returns ``{"dataset_id", "slug", "columns", "imported", "errors", "total_errors"}``.
+    """
     reader = csv.reader(io.StringIO(raw))
     try:
         header = next(reader)
     except StopIteration:
-        return jsonify({"error": "empty CSV file"}), 400
+        raise ValueError("empty CSV file")
     header = [h.strip() for h in header]
     data_rows = list(reader)
     if not header:
-        return jsonify({"error": "no header row in CSV"}), 400
+        raise ValueError("no header row in CSV")
 
-    # sanitise column keys
-    def _safe_key(h: str) -> str:
-        k = "".join(c if c.isalnum() or c == "_" else "_" for c in h.lower()).strip("_")
-        if k and k[0].isdigit():
-            k = "col_" + k
-        return k or "col"
+    store = CatalogStore(db)
 
+    # -- import into existing dataset: match columns by key or label --
+    if dataset_id is not None:
+        ds = await store.get_dataset(dataset_id=dataset_id)
+        if not ds:
+            raise ValueError("dataset not found")
+        col_by_key = {c["key"]: c for c in ds["columns"]}
+        col_by_label = {c["label"].strip().lower(): c for c in ds["columns"]}
+        # map each header index to an existing column (or None to skip)
+        col_map: list[tuple[int, dict | None]] = []
+        for i, h in enumerate(header):
+            key = _safe_key(h)
+            if key in col_by_key:
+                col_map.append((i, col_by_key[key]))
+            elif h.strip().lower() in col_by_label:
+                col_map.append((i, col_by_label[h.strip().lower()]))
+            else:
+                col_map.append((i, None))
+
+        rs = RowStore(db)
+        imported = 0
+        errors: list[str] = []
+        for row in data_rows:
+            values: dict[str, Any] = {}
+            for i, col in col_map:
+                if col is None or i >= len(row):
+                    continue
+                values[col["key"]] = _coerce_cell(row[i], col["type"])
+            try:
+                await rs.create_row(ds, values)
+                imported += 1
+            except (ValueError, KeyError) as exc:
+                errors.append(f"row {imported + len(errors) + 1}: {exc}")
+        return {
+            "dataset_id": ds["id"],
+            "slug": ds["slug"],
+            "columns": len(ds["columns"]),
+            "imported": imported,
+            "errors": errors[:20],
+            "total_errors": len(errors),
+        }
+
+    # -- create new dataset --
     keys = [_safe_key(h) for h in header]
-    # deduplicate keys
     seen: dict[str, int] = {}
     for i, k in enumerate(keys):
         if k in seen:
@@ -140,7 +181,6 @@ async def import_csv() -> Any:
         else:
             seen[k] = 1
 
-    # infer types from sample (first 200 non-empty values per column)
     col_samples: list[list[str]] = [[] for _ in header]
     for row in data_rows[:200]:
         for i, cell in enumerate(row[: len(header)]):
@@ -148,11 +188,10 @@ async def import_csv() -> Any:
                 col_samples[i].append(cell)
     types = [_infer_type(s) for s in col_samples]
 
-    store = CatalogStore(get_db())
     try:
         ds = await store.create_dataset(slug, name)
     except (ValueError, KeyError) as exc:
-        return jsonify({"error": str(exc)}), 400
+        raise ValueError(str(exc))
 
     for pos, (key, ty) in enumerate(zip(keys, types), 1):
         label = header[pos - 1] or key
@@ -162,14 +201,13 @@ async def import_csv() -> Any:
         try:
             await store.add_column(ds["id"], key, label, ty, config, pos)
         except (ValueError, KeyError):
-            # if a column fails skip it but keep going
             continue
 
     ds = await store.get_dataset(dataset_id=ds["id"])
     if not ds:
-        return jsonify({"error": "dataset disappeared after creation"}), 500
+        raise ValueError("dataset disappeared after creation")
 
-    rs = RowStore(get_db())
+    rs = RowStore(db)
     imported = 0
     errors: list[str] = []
     for row in data_rows:
@@ -183,14 +221,188 @@ async def import_csv() -> Any:
         except (ValueError, KeyError) as exc:
             errors.append(f"row {imported + len(errors) + 1}: {exc}")
 
-    return jsonify({
+    return {
         "dataset_id": ds["id"],
         "slug": ds["slug"],
         "columns": len(ds["columns"]),
         "imported": imported,
         "errors": errors[:20],
         "total_errors": len(errors),
-    }), 201
+    }
+
+
+async def _import_json_data(
+    db, data: dict, *, slug: str = "", name: str = "", dataset_id: int | None = None,
+) -> dict[str, Any]:
+    """Import JSON data (StatDB export format) — create new or append to existing dataset.
+
+    Returns ``{"dataset_id", "slug", "columns", "imported", "errors", "total_errors"}``.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("invalid JSON: expected an object")
+    ds_meta = data.get("dataset")
+    if not isinstance(ds_meta, dict):
+        raise ValueError("invalid JSON: missing 'dataset' object")
+    json_cols = ds_meta.get("columns", [])
+    if not isinstance(json_cols, list):
+        raise ValueError("invalid JSON: 'columns' must be a list")
+    json_rows = data.get("rows", [])
+    if not isinstance(json_rows, list):
+        raise ValueError("invalid JSON: 'rows' must be a list")
+
+    store = CatalogStore(db)
+
+    # -- import into existing dataset: match columns by key --
+    if dataset_id is not None:
+        ds = await store.get_dataset(dataset_id=dataset_id)
+        if not ds:
+            raise ValueError("dataset not found")
+        col_by_key = {c["key"]: c for c in ds["columns"]}
+        rs = RowStore(db)
+        imported = 0
+        errors: list[str] = []
+        for row in json_rows:
+            if not isinstance(row, dict):
+                continue
+            values: dict[str, Any] = {}
+            for k, v in row.items():
+                if k in col_by_key:
+                    values[k] = v
+            try:
+                await rs.create_row(ds, values)
+                imported += 1
+            except (ValueError, KeyError) as exc:
+                errors.append(f"row {imported + len(errors) + 1}: {exc}")
+        return {
+            "dataset_id": ds["id"],
+            "slug": ds["slug"],
+            "columns": len(ds["columns"]),
+            "imported": imported,
+            "errors": errors[:20],
+            "total_errors": len(errors),
+        }
+
+    # -- create new dataset --
+    if not slug:
+        slug = ds_meta.get("slug", "")
+    if not name:
+        name = ds_meta.get("name", "") or slug
+    if not slug:
+        raise ValueError("slug is required (provide in form or JSON)")
+
+    try:
+        ds = await store.create_dataset(slug, name, ds_meta.get("description", ""))
+    except (ValueError, KeyError) as exc:
+        raise ValueError(str(exc))
+
+    for pos, col in enumerate(json_cols, 1):
+        if not isinstance(col, dict):
+            continue
+        key = col.get("key", "")
+        if not key:
+            continue
+        ty = col.get("type", "text")
+        label = col.get("label", key)
+        config = col.get("config", {})
+        try:
+            await store.add_column(ds["id"], key, label, ty, config, pos)
+        except (ValueError, KeyError):
+            continue
+
+    ds = await store.get_dataset(dataset_id=ds["id"])
+    if not ds:
+        raise ValueError("dataset disappeared after creation")
+
+    rs = RowStore(db)
+    imported = 0
+    errors: list[str] = []
+    col_keys = {c["key"] for c in ds["columns"]}
+    for row in json_rows:
+        if not isinstance(row, dict):
+            continue
+        values = {k: v for k, v in row.items() if k in col_keys}
+        try:
+            await rs.create_row(ds, values)
+            imported += 1
+        except (ValueError, KeyError) as exc:
+            errors.append(f"row {imported + len(errors) + 1}: {exc}")
+
+    return {
+        "dataset_id": ds["id"],
+        "slug": ds["slug"],
+        "columns": len(ds["columns"]),
+        "imported": imported,
+        "errors": errors[:20],
+        "total_errors": len(errors),
+    }
+
+
+# ---------------------------------------------------------------------------
+# CSV / JSON import API
+# ---------------------------------------------------------------------------
+
+@bp.post("/datasets/import-csv")
+async def import_csv() -> Any:
+    files = await request.files
+    form = await request.form
+    upload = files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"error": "no file uploaded"}), 400
+
+    slug = (form.get("slug") or "").strip().lower()
+    name = (form.get("name") or "").strip()
+    dataset_id = form.get("dataset_id")
+    dataset_id = int(dataset_id) if dataset_id else None
+
+    if not slug and not dataset_id:
+        slug, name = _derive_slug_name(upload.filename)
+    if not name and not dataset_id:
+        name = name or slug
+
+    raw = upload.read().decode("utf-8-sig", errors="replace")
+    try:
+        result = await _import_csv_data(
+            get_db(), raw, slug=slug, name=name, dataset_id=dataset_id,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    status = 200 if dataset_id else 201
+    return jsonify(result), status
+
+
+@bp.post("/datasets/import-json")
+async def import_json() -> Any:
+    data = None
+    # try JSON body first
+    data = await request.get_json(silent=True)
+    if not data:
+        files = await request.files
+        upload = files.get("file")
+        if upload:
+            raw = upload.read().decode("utf-8-sig", errors="replace")
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                return jsonify({"error": f"invalid JSON: {exc}"}), 400
+    if not data:
+        return jsonify({"error": "no JSON data or file uploaded"}), 400
+
+    form = await request.form
+    slug = (form.get("slug") or "").strip().lower()
+    name = (form.get("name") or "").strip()
+    dataset_id = form.get("dataset_id") or request.args.get("dataset_id")
+    dataset_id = int(dataset_id) if dataset_id else None
+
+    try:
+        result = await _import_json_data(
+            get_db(), data, slug=slug, name=name, dataset_id=dataset_id,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    status = 200 if dataset_id else 201
+    return jsonify(result), status
 
 
 # ---------------------------------------------------------------------------
