@@ -49,6 +49,24 @@ async def test_missing_view(views_db):
         await store.update_view(999, name="x")
 
 
+# ---------- store: widget types (§15.13) ----------
+
+
+def test_widget_types_include_vertical_bars():
+    """§15.13: horizontal + vertical bar variants are valid widget types."""
+    from app.views.store import WIDGET_TYPES
+    for wtype in ("bar", "stacked_bar", "bar_vertical", "stacked_bar_vertical"):
+        assert wtype in WIDGET_TYPES
+
+
+async def test_vertical_bar_widget_accepted(views_db):
+    store = ViewStore(views_db)
+    view = await store.create_view("Vert")
+    w = await store.add_widget(view["id"], "bar_vertical", title="V", config={"measure": "sum"})
+    assert w["type"] == "bar_vertical"
+    assert (await store.list_widgets(view["id"]))[0]["type"] == "bar_vertical"
+
+
 # ---------- store: widgets ----------
 
 

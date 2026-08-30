@@ -264,12 +264,21 @@ h3 { font-size: 16px; margin: 20px 0 8px; }
 
 .widget-bars { display: flex; flex-direction: column; gap: 6px; }
 .bar-row { display: flex; align-items: center; gap: 8px; }
-.bar-label { flex: 0 0 64px; font-size: 12px; color: var(--fg-muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-label { flex: 0 1 clamp(64px, 32%, 260px); min-width: 48px; font-size: 12px; color: var(--fg-muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-track { flex: 1; height: 18px; background: var(--bg-softer); border-radius: 4px; display: flex; overflow: hidden; }
 .bar-fill { height: 100%; min-width: 2px; border-radius: 4px; transition: width .2s ease; }
 .bar-value { flex: 0 0 60px; font-size: 12px; text-align: right; color: var(--fg); font-variant-numeric: tabular-nums; }
 
-.widget-line, .widget-pie, .widget-heatmap { width: 100%; height: auto; max-height: 240px; }
+/* todo §15.20: SVG charts scale to fill the widget body (was fixed ~240px) */
+.widget-body { display: flex; flex-direction: column; }
+[data-widget-body] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.widget-pie {
+  flex: 1 1 auto; min-height: 0; width: 100%; display: block;
+}
+/* todo §15.21: line/heatmap/vbar carry explicit px dimensions (fill the
+   widget, scroll the widget body when the content needs more room) — flex
+   must not stretch them, and CSS width would override their width attr */
+.widget-line, .widget-heatmap, .widget-vbar { flex: none; display: block; }
 .widget-heatmap .hm-label { font-size: 9px; fill: var(--fg-muted); }
 
 .widget-line .axis-label { font-size: 9px; fill: var(--fg-muted); }
@@ -305,9 +314,8 @@ h3 { font-size: 16px; margin: 20px 0 8px; }
 .btn-link:hover { text-decoration: underline; }
 .kiosk-mode .topbar,
 .kiosk-mode .narrow,
-.kiosk-mode #widget-edit-section,
-.kiosk-mode #widget-create-form,
-.kiosk-mode #view-settings-form,
+.kiosk-mode .modal-overlay,
+.kiosk-mode .view-toolbar-actions,
 .kiosk-mode .widget-edit,
 .kiosk-mode .widget-delete,
 .kiosk-mode .widget-type,
@@ -338,6 +346,57 @@ h3 { font-size: 16px; margin: 20px 0 8px; }
 }
 .cfg-option-row .cfg-move:hover { color: var(--fg); }
 .cfg-opt-label { flex: 1 1 12rem; min-width: 8rem; }
+
+/* ---------- todo §15.13: vertical (Excel-style) bar charts ---------- */
+.widget-vbar .axis-label { font-size: 9px; fill: var(--fg-muted); }
+.widget-vbar .tick-label { font-size: 9px; fill: var(--fg-muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- todo §15.16: ⋯ card menu on the views list ---------- */
+.card-menu { position: relative; margin-left: auto; }
+.card-menu > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  padding: 2px 10px; border-radius: 6px; color: var(--fg-muted);
+  border: 1px solid transparent; font-weight: 700; line-height: 1.4;
+}
+.card-menu > summary::-webkit-details-marker { display: none; }
+.card-menu > summary:hover { color: var(--fg); border-color: var(--line); }
+.card-menu-popup {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30;
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg-soft, var(--bg)); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px; min-width: 220px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+.card-menu-popup .inline-form { margin-left: 0; display: flex; gap: 6px; }
+.card-menu-popup input { font-size: 13px; padding: 4px 8px; }
+
+/* ---------- todo §15.17-19: modals (add/edit widget, view settings) ---------- */
+.view-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.view-toolbar h1 { margin: 0; }
+.view-toolbar-actions { display: inline-flex; gap: 8px; align-items: center; margin-left: auto; }
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 8vh 16px 16px; overflow-y: auto;
+}
+.modal-overlay[hidden] { display: none; }
+.modal {
+  background: var(--bg-soft, var(--bg));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  width: min(480px, 100%);
+  box-shadow: 0 12px 40px rgba(0,0,0,.3);
+}
+.modal h2 { margin: 0 0 12px; }
+.widget-form { display: flex; flex-direction: column; gap: 10px; }
+
+/* settings row inside the view-settings modal */
+.settings-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.field-inline { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.check-label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 .cfg-opt-en, .cfg-opt-pl { width: 6rem; }
 .cfg-opt-color-wrap { display: inline-flex; align-items: center; gap: 2px; }
 .cfg-opt-color-wrap .cfg-opt-color { width: 2rem; height: 1.75rem; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; }

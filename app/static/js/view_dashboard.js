@@ -72,7 +72,9 @@
 
   // Which fields each widget type needs
   // (heatmap needs "series" so it can have two axes — issue #10 / todo §15.10;
-  //  group_by_2 = composite bucket axis, e.g. month + year — todo §15.12)
+  //  group_by_2 = composite bucket axis, e.g. month + year — todo §15.12;
+  //  sort_by/sort_dir = result ordering options — todo §15.15)
+  var SORT_FIELDS = ["sort_by", "sort_dir"];
   var FIELD_RULES = {
     note:          ["text"],
     global_filter: ["dataset", "column"],
@@ -83,18 +85,24 @@
     kpi_count:     ["dataset"],
     kpi_median:    ["dataset", "column"],
     kpi_trend:     ["dataset", "column"],
-    bar:           ["dataset", "measure", "column", "group_by", "group_by_2"],
-    stacked_bar:   ["dataset", "measure", "column", "group_by", "group_by_2", "series"],
-    line:          ["dataset", "measure", "column", "group_by", "group_by_2"],
-    pie:           ["dataset", "measure", "column", "group_by"],
-    heatmap:       ["dataset", "measure", "column", "group_by", "group_by_2", "series"],
-    agg_table:     ["dataset", "measure", "column", "group_by", "group_by_2"],
+    bar:                    ["dataset", "measure", "column", "group_by", "group_by_2"].concat(SORT_FIELDS),
+    stacked_bar:            ["dataset", "measure", "column", "group_by", "group_by_2", "series"].concat(SORT_FIELDS),
+    bar_vertical:           ["dataset", "measure", "column", "group_by", "group_by_2"].concat(SORT_FIELDS),
+    stacked_bar_vertical:   ["dataset", "measure", "column", "group_by", "group_by_2", "series"].concat(SORT_FIELDS),
+    line:          ["dataset", "measure", "column", "group_by", "group_by_2"].concat(SORT_FIELDS),
+    pie:           ["dataset", "measure", "column", "group_by"].concat(SORT_FIELDS),
+    heatmap:       ["dataset", "measure", "column", "group_by", "group_by_2", "series"].concat(SORT_FIELDS),
+    agg_table:     ["dataset", "measure", "column", "group_by", "group_by_2"].concat(SORT_FIELDS),
     table:         ["dataset"],
     form:          ["dataset"],
   };
   function visibleFields(type) { return FIELD_RULES[type] || []; }
 
-  var FIELD_ID_MAP = { dataset: "dataset", column: "column", measure: "measure", group_by: "groupby", group_by_2: "groupby2", series: "series", text: "text" };
+  var FIELD_ID_MAP = {
+    dataset: "dataset", column: "column", measure: "measure",
+    group_by: "groupby", group_by_2: "groupby2", series: "series", text: "text",
+    sort_by: "sortby", sort_dir: "sortdir",
+  };
 
   function updateFieldVisibility(form) {
     if (!form) { return; }
@@ -124,6 +132,9 @@
         if (val) { config["dataset_id"] = parseInt(val, 10); }
       } else if (f === "text") {
         if (val && val.trim()) { config["text"] = val.trim(); }
+      } else if (f === "sort_by") {
+        // "default" = engine order — don't persist it (todo §15.15)
+        if (val && val !== "default") { config["sort_by"] = val; }
       } else {
         if (val && val.trim()) { config[f] = val.trim(); }
       }
@@ -143,6 +154,35 @@
     });
   }
 
+  // ---- modals (todo §15.17-19): add/edit widget + view settings pop up
+  // over a dimmed backdrop; click on the backdrop (or Esc) closes them.
+  function openModal(overlay) {
+    if (overlay) { overlay.removeAttribute("hidden"); }
+  }
+  function closeModal(overlay) {
+    if (overlay) { overlay.setAttribute("hidden", ""); }
+  }
+  $$("[data-modal-open]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      openModal(document.getElementById(btn.getAttribute("data-modal-open")));
+    });
+  });
+  $$(".modal-overlay").forEach(function (ov) {
+    ov.addEventListener("click", function (ev) {
+      if (ev.target === ov) { closeModal(ov); } // click on the dimmed backdrop
+    });
+  });
+  $$("[data-modal-close]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      closeModal(btn.closest(".modal-overlay"));
+    });
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") {
+      $$(".modal-overlay:not([hidden])").forEach(closeModal);
+    }
+  });
+
   // ---- create form (issues #2, #3) ----
   var createForm = $("#widget-create-form");
   if (createForm) {
@@ -158,7 +198,7 @@
   }
 
   // ---- edit form (issues #2, #3, #5) ----
-  var editSection = $("#widget-edit-section");
+  var editModal = $("#widget-edit-modal");
   var editForm = $("#widget-edit-form");
   var editCancel = $("#widget-edit-cancel");
   var currentWidgetNode = null;
@@ -189,16 +229,19 @@
     }
     var weMeasure = $("#we-measure");
     if (weMeasure && cfg.measure) { weMeasure.value = cfg.measure; }
+    var weSortBy = $("#we-sortby");
+    if (weSortBy) { weSortBy.value = cfg.sort_by || "default"; }
+    var weSortDir = $("#we-sortdir");
+    if (weSortDir) { weSortDir.value = cfg.sort_dir || "asc"; }
     var weText = $("#we-text");
     if (weText) { weText.value = cfg.text || ""; }
     updateFieldVisibility(editForm);
-    editSection.removeAttribute("hidden");
-    editSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    openModal(editModal); // pops up over the grid (todo §15.18)
     $("#we-title").focus();
   }
   function closeEdit() {
     currentWidgetNode = null;
-    editSection.setAttribute("hidden", "");
+    closeModal(editModal);
   }
 
   if (gridEl) {

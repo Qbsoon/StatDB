@@ -11,10 +11,20 @@
       <li class="dataset-card">
         <a class="dataset-name" href="{{ url_for('web.view_detail', view_id=v.id) }}">{{ v.name }}</a>
         <span class="muted small">{{ t("views.widgets_count", count=v.widgets|length) }}</span>
-        <form method="post" action="{{ url_for('web.view_delete', view_id=v.id) }}" class="inline-form"
-              onsubmit="return confirm({{ t('views.confirm_delete_view', name=v.name) | tojson | e }});">
-          <button type="submit" class="danger small">{{ t("views.delete_view_btn") }}</button>
-        </form>
+        {# todo §15.16: destructive/less-common actions live behind a ⋯ menu #}
+        <details class="card-menu">
+          <summary title="{{ t('views.menu') }}" aria-label="{{ t('views.menu') }}">⋯</summary>
+          <div class="card-menu-popup">
+            <form method="post" action="{{ url_for('web.view_rename', view_id=v.id) }}" class="inline-form">
+              <input name="name" value="{{ v.name }}" required aria-label="{{ t('views.name') }}">
+              <button type="submit" class="small">{{ t("views.rename_btn") }}</button>
+            </form>
+            <form method="post" action="{{ url_for('web.view_delete', view_id=v.id) }}" class="inline-form"
+                  onsubmit="return confirm({{ t('views.confirm_delete_view', name=v.name) | tojson | e }});">
+              <button type="submit" class="danger small">{{ t("views.delete_view_btn") }}</button>
+            </form>
+          </div>
+        </details>
       </li>
     {% endfor %}
   </ul>

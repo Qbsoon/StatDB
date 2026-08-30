@@ -131,16 +131,224 @@
     return true;
   }
 
-  function rowsToPoints(data) {
+  function rowsToPoints(data, config) {
     var items = Array.isArray(data) ? data : (data && data.items);
     if (!Array.isArray(items)) { return []; }
-    return items.map(function (r) {
+    var pts = items.map(function (r) {
       return { label: String(r.label !== undefined ? r.label : r.key), value: Number(r.value) || 0 };
+    });
+    return sortPoints(pts, config);
+  }
+
+  // ---- result sorting (todo §15.15) ----
+  // sort_by: "default" (engine order) | "label" (group column) | "value" (measure)
+  function sortPoints(pts, config) {
+    var sb = config && config.sort_by;
+    if (!sb || sb === "default" || !Array.isArray(pts) || pts.length < 2) { return pts; }
+    var dir = config.sort_dir === "desc" ? -1 : 1;
+    return pts.slice().sort(function (a, b) {
+      if (sb === "value") {
+        return dir * ((Number(a.value) || 0) - (Number(b.value) || 0));
+      }
+      return dir * String(a.label).localeCompare(
+        String(b.label), undefined, { numeric: true, sensitivity: "base" });
     });
   }
 
+  // Sort stacked buckets (label or bucket total) while keeping series
+  // values aligned with their buckets.
+  function sortStacked(data, config) {
+    var sb = config && config.sort_by;
+    if (!sb || sb === "default" || !data || data.kind !== "stacked" ||
+        !Array.isArray(data.buckets) || data.buckets.length < 2) {
+      return data;
+    }
+    var dir = config.sort_dir === "desc" ? -1 : 1;
+    var idx = data.buckets.map(function (b, i) { return i; });
+    var totals = data.buckets.map(function (b, i) {
+      return data.series.reduce(function (s, sr) { return s + (Number(sr.values[i]) || 0); }, 0);
+    });
+    idx.sort(function (a, b) {
+      if (sb === "value") { return dir * (totals[a] - totals[b]); }
+      return dir * String(data.buckets[a].label).localeCompare(
+        String(data.buckets[b].label), undefined, { numeric: true, sensitivity: "base" });
+    });
+    return {
+      kind: "stacked",
+      measure: data.measure,
+      buckets: idx.map(function (i) { return data.buckets[i]; }),
+      series: data.series.map(function (sr) {
+        return {
+          key: sr.key, label: sr.label, color: sr.color,
+          values: idx.map(function (i) { return sr.values[i]; }),
+        };
+      }),
+    };
+  }
+
+  // ---- vertical bars (todo §15.13): Excel-style, labels at the bottom,
+  // value axis with auto-computed "nice" checkpoints (100, 200, 300…) left.
+  function niceBounds(minV, maxV) {
+    var lo = Math.min(0, minV), hi = Math.max(0, maxV);
+    if (lo === hi) { hi = lo + 1; }
+    var range = hi - lo;
+    var mag = Math.pow(10, Math.floor(Math.log(range) / Math.LN10));
+    var norm = range / mag;
+    var mul = norm <= 1 ? 0.25 : norm <= 2 ? 0.5 : norm <= 5 ? 1 : 2;
+    var step = mul * mag;
+    return {
+      min: Math.floor(lo / step) * step,
+      max: Math.ceil(hi / step) * step,
+      step: step,
+    };
+  }
+
+  function renderBarVertical(body, data, config) {
+    var pts = rowsToPoints(data, config);
+    if (!pts.length) { return false; }
+    var seriesList = [{
+      label: config.column || config.measure || "",
+      color: cssVar("--accent", DEFAULT_COLORS[0]),
+      values: pts.map(function (p) { return p.value; }),
+    }];
+    return renderVerticalChart(body, pts.map(function (p) { return p.label; }), seriesList, config);
+  }
+
+  function renderStackedBarVertical(body, data, config) {
+    if (!data) { return false; }
+    if (data.kind === "grouped") { data = groupedToStacked(data); }
+    if (data.kind !== "stacked" || !data.buckets.length) { return false; }
+    data = sortStacked(data, config);
+    var labels = data.buckets.map(function (b) { return b.label; });
+    var seriesList = data.series.map(function (sr, si) {
+      return {
+        label: sr.label,
+        color: sr.color || DEFAULT_COLORS[si % DEFAULT_COLORS.length],
+        values: data.buckets.map(function (b, bi) { return Number(sr.values[bi]) || 0; }),
+      };
+    });
+    return renderVerticalChart(body, labels, seriesList, config);
+  }
+
+  function renderVerticalChart(body, labels, seriesList, config) {
+    var n = labels.length;
+    var allVals = [];
+    seriesList.forEach(function (sr) { sr.values.forEach(function (v) { allVals.push(Number(v) || 0); }); });
+    var bounds = niceBounds(
+      Math.min.apply(null, allVals),
+      Math.max.apply(null, allVals));
+    // §15.21: render at the widget body's size so the chart fills the widget;
+    // with many bars keep ≥30px per bar and scroll horizontally instead of
+    // squeezing bars/labels into unreadability (same approach as line chart).
+    var padL = 52, padR = 10, padT = 12, padB = 38;
+    var box = bodySize(body, 360, 200);
+    var h = Math.max(box.h, 120);
+    var w = Math.max(box.w, padL + padR + Math.max(n, 1) * 30);
+    var iw = w - padL - padR, ih = h - padT - padB;
+    var svgNS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "widget-vbar");
+    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    svg.setAttribute("width", Math.round(w));   // explicit size — fills the widget,
+    svg.setAttribute("height", Math.round(h));  // overflows + scrolls when w > body (§15.21)
+    var axisColor = cssVar("--fg-dim", "#888");
+    function py(v) { return padT + ih - ih * ((v - bounds.min) / (bounds.max - bounds.min)); }
+    // horizontal gridlines + y-axis value checkpoints (0, 100, 200, …)
+    for (var v = bounds.min; v <= bounds.max + bounds.step / 2; v += bounds.step) {
+      var rv = Math.round(v * 1e6) / 1e6;
+      var y = py(rv);
+      var line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", padL); line.setAttribute("x2", w - padR);
+      line.setAttribute("y1", y); line.setAttribute("y2", y);
+      line.setAttribute("stroke", axisColor);
+      line.setAttribute("stroke-opacity", rv === 0 ? "0.6" : "0.25");
+      line.setAttribute("stroke-width", "1");
+      svg.appendChild(line);
+      var yt = document.createElementNS(svgNS, "text");
+      yt.setAttribute("x", padL - 6); yt.setAttribute("y", y + 3);
+      yt.setAttribute("text-anchor", "end");
+      yt.setAttribute("class", "axis-label");
+      yt.textContent = fmtNumber(rv);
+      svg.appendChild(yt);
+    }
+    // bars (bottom-up stacked segments)
+    var band = iw / n;
+    var barW = Math.min(band * 0.65, 64);
+    labels.forEach(function (lab, i) {
+      var x = padL + band * i + (band - barW) / 2;
+      var acc = 0;
+      seriesList.forEach(function (sr) {
+        var val = Number(sr.values[i]) || 0;
+        acc += val;
+      });
+      var yTop = py(acc), yZero = py(0);
+      var by = Math.min(yTop, yZero);
+      var bh = Math.abs(yTop - yZero);
+      if (seriesList.length === 1) {
+        var rect = document.createElementNS(svgNS, "rect");
+        rect.setAttribute("x", x.toFixed(1)); rect.setAttribute("y", by.toFixed(1));
+        rect.setAttribute("width", barW.toFixed(1)); rect.setAttribute("height", Math.max(bh, 0.5).toFixed(1));
+        rect.setAttribute("rx", 2);
+        rect.setAttribute("fill", seriesList[0].color);
+        var t = document.createElementNS(svgNS, "title");
+        t.textContent = lab + ": " + fmtNumber(acc);
+        rect.appendChild(t);
+        svg.appendChild(rect);
+      } else {
+        // stacked segments drawn bottom-up
+        var segs = seriesList.map(function (sr) {
+          return { color: sr.color, label: sr.label, v: Number(sr.values[i]) || 0 };
+        }).filter(function (s) { return s.v !== 0; });
+        var cursor = 0; // value at the bottom of the next segment
+        segs.forEach(function (s) {
+          var from = py(cursor), to = py(cursor + s.v);
+          var r2 = document.createElementNS(svgNS, "rect");
+          r2.setAttribute("x", x.toFixed(1));
+          r2.setAttribute("y", Math.min(from, to).toFixed(1));
+          r2.setAttribute("width", barW.toFixed(1));
+          r2.setAttribute("height", Math.max(Math.abs(to - from), 0.5).toFixed(1));
+          r2.setAttribute("fill", s.color);
+          var t2 = document.createElementNS(svgNS, "title");
+          t2.textContent = lab + " \u00D7 " + s.label + ": " + fmtNumber(s.v);
+          r2.appendChild(t2);
+          svg.appendChild(r2);
+          cursor += s.v;
+        });
+      }
+      // x-axis label (thinned by actual band width so they don't overlap;
+      // §15.21 — with a scrollable chart, band is ≥30px so this stays modest)
+      var labelEvery = Math.max(1, Math.ceil(70 / band));
+      if (i % labelEvery === 0 || i === n - 1) {
+        var xt = document.createElementNS(svgNS, "text");
+        xt.setAttribute("x", (padL + band * i + band / 2).toFixed(1));
+        xt.setAttribute("y", h - padB + 16);
+        xt.setAttribute("text-anchor", "middle");
+        xt.setAttribute("class", "axis-label");
+        xt.textContent = lab;
+        svg.appendChild(xt);
+      }
+    });
+    body.appendChild(svg);
+    if (seriesList.length > 1) {
+      var legend = document.createElement("div");
+      legend.className = "chart-legend";
+      seriesList.forEach(function (sr) {
+        var item = document.createElement("span");
+        item.className = "chart-legend-item";
+        var dot = document.createElement("span");
+        dot.className = "chart-legend-dot";
+        dot.style.background = sr.color;
+        item.appendChild(dot);
+        item.appendChild(document.createTextNode(" " + sr.label));
+        legend.appendChild(item);
+      });
+      body.appendChild(legend);
+    }
+    return true;
+  }
+
   function renderBar(body, data, config) {
-    var pts = rowsToPoints(data);
+    var pts = rowsToPoints(data, config);
     if (!pts.length) { return false; }
     var max = Math.max.apply(null, pts.map(function (p) { return Math.abs(p.value); })) || 1;
     var wrap = document.createElement("div");
@@ -151,6 +359,7 @@
       var lab = document.createElement("span");
       lab.className = "bar-label";
       lab.textContent = p.label;
+      lab.title = p.label; // full text on hover even when truncated (todo §15.14)
       var track = document.createElement("div");
       track.className = "bar-track";
       var fill = document.createElement("div");
@@ -185,7 +394,7 @@
         });
       });
     } else {
-      var pts = rowsToPoints(data);
+      var pts = rowsToPoints(data, config);
       if (!pts.length) { return false; }
       seriesList.push({
         label: config.column || config.measure || "",
@@ -194,7 +403,12 @@
       });
     }
     var labels = seriesList[0].points.map(function (p) { return p.label; });
-    var w = 320, h = 160, padL = 44, padR = 10, padT = 12, padB = 34;
+    // §15.20/§15.21: render at the widget body's size so the chart fills the
+    // widget; with many points keep ≥34px per point and scroll horizontally.
+    var box = bodySize(body, 320, 160);
+    var w = Math.max(box.w, Math.max(320, labels.length * 34));
+    var h = box.h;
+    var padL = 44, padR = 10, padT = 12, padB = 34;
     var allVals = [];
     seriesList.forEach(function (sr) { sr.points.forEach(function (p) { allVals.push(p.value); }); });
     var max = Math.max.apply(null, allVals);
@@ -208,6 +422,8 @@
     var svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("class", "widget-line");
     svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    svg.setAttribute("width", w);   // explicit size — fills the widget,
+    svg.setAttribute("height", h);  // overflows + scrolls when w > body (§15.21)
     var axisColor = cssVar("--fg-dim", "#888");
     function px(i) { return padL + (n === 1 ? iw / 2 : iw * (i / (n - 1))); }
     function py(v) { return padT + ih - ih * ((v - min) / span); }
@@ -284,7 +500,7 @@
   }
 
   function renderPie(body, data, config) {
-    var pts = rowsToPoints(data).filter(function (p) { return p.value > 0; });
+    var pts = rowsToPoints(data, config).filter(function (p) { return p.value > 0; });
     var total = pts.reduce(function (s, p) { return s + p.value; }, 0);
     if (!total) { return false; }
     var size = 150, r = 60, cx = size / 2, cy = size / 2;
@@ -316,7 +532,7 @@
   }
 
   function renderAggTable(body, data, config) {
-    var pts = rowsToPoints(data);
+    var pts = rowsToPoints(data, config);
     if (!pts.length) { return false; }
     var table = document.createElement("table");
     table.className = "table widget-agg-table";
@@ -407,6 +623,7 @@
       data = groupedToStacked(data);
     }
     if (data.kind !== "stacked" || !data.buckets.length) { return false; }
+    data = sortStacked(data, config);
     var buckets = data.buckets;
     var series = data.series;
     var totals = buckets.map(function (b, bi) {
@@ -421,6 +638,7 @@
       var lab = document.createElement("span");
       lab.className = "bar-label";
       lab.textContent = b.label;
+      lab.title = b.label; // full text on hover even when truncated (todo §15.14)
       var track = document.createElement("div");
       track.className = "bar-track";
       series.forEach(function (sr, si) {
@@ -453,6 +671,7 @@
       data = groupedToStacked(data);
     }
     if (data.kind !== "stacked" || !data.buckets.length || !data.series.length) { return false; }
+    data = sortStacked(data, config); // §15.15 — result sorting applies here too
     var buckets = data.buckets;
     var series = data.series;
     var max = 0;
@@ -463,10 +682,17 @@
     var cw = 26, chh = 20, padL = 70, padT = 18;
     var w = padL + series.length * cw + 4;
     var h = padT + buckets.length * chh + 24;
+    // §15.21: scale up to fill the widget when there's room, but never below
+    // 1× natural size (readable cells/labels) — overflow scrolls instead.
+    var box = bodySize(body, 0, 0);
+    var s = Math.min(box.w / w, box.h / h);
+    if (!isFinite(s) || s < 1) { s = 1; }
     var accent = cssVar("--accent", DEFAULT_COLORS[0]);
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("class", "widget-heatmap");
     svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    svg.setAttribute("width", Math.round(w * s));
+    svg.setAttribute("height", Math.round(h * s));
     series.forEach(function (sr, si) {
       var tx = document.createElementNS("http://www.w3.org/2000/svg", "text");
       tx.setAttribute("x", padL + si * cw + cw / 2);
@@ -502,6 +728,19 @@
     });
     body.appendChild(svg);
     return true;
+  }
+
+  // ---- size-aware rendering (todo §15.21) ----
+  // Charts measure their container and render at that size, so they fill the
+  // widget; when the content needs more room (many points / buckets) they keep
+  // a readable size and the widget body scrolls instead of shrinking.
+  function bodySize(body, fallbackW, fallbackH) {
+    var w = Math.round(body && body.clientWidth) || 0;
+    var h = Math.round(body && body.clientHeight) || 0;
+    return {
+      w: Math.max(w, fallbackW || 0),
+      h: Math.max(h, fallbackH || 0),
+    };
   }
 
   // ---- data table & add-record form (issue #9 / todo §15.9) ----
@@ -709,6 +948,8 @@
     kpi_trend:     { aggConfig: { measure: "sum", showTrend: true }, render: renderKpi, agg: true },
     bar:           { aggConfig: { measure: "sum" }, render: renderBar, agg: true, group: true },
     stacked_bar:   { aggConfig: { measure: "sum" }, render: renderStackedBar, agg: true, png: true },
+    bar_vertical:       { aggConfig: { measure: "sum" }, render: renderBarVertical, agg: true, group: true, png: true },
+    stacked_bar_vertical: { aggConfig: { measure: "sum" }, render: renderStackedBarVertical, agg: true, png: true },
     line:          { aggConfig: { measure: "sum" }, render: renderLine, agg: true, group: true, png: true },
     pie:           { aggConfig: { measure: "sum" }, render: renderPie, agg: true, group: true, png: true },
     heatmap:       { aggConfig: { measure: "sum" }, render: renderHeatmap, agg: true, png: true },
@@ -722,10 +963,37 @@
     return (el && el.getAttribute(attr)) || fallback;
   }
 
+  // widget types that render at the container's size — they need a re-render
+  // when the widget is resized (todo §15.21)
+  var SIZE_AWARE = { line: 1, heatmap: 1, bar_vertical: 1, stacked_bar_vertical: 1 };
+  var sizeQueue = [];
+  var sizeTimer = null;
+
+  function watchBodySize(section, body) {
+    if (typeof ResizeObserver === "undefined") { return; }
+    if (section._sizeRO) { section._sizeRO.disconnect(); }
+    var ro = new ResizeObserver(function (entries) {
+      var r = entries[0].contentRect;
+      var w = Math.round(r.width), h = Math.round(r.height);
+      if (section._bodyW === w && section._bodyH === h) { return; }
+      var first = section._bodyW === undefined;
+      section._bodyW = w; section._bodyH = h;
+      if (first) { return; } // initial observation — already rendered at this size
+      if (sizeQueue.indexOf(section) === -1) { sizeQueue.push(section); }
+      clearTimeout(sizeTimer);
+      sizeTimer = setTimeout(function () {
+        sizeQueue.splice(0).forEach(renderWidget);
+      }, 200);
+    });
+    ro.observe(body);
+    section._sizeRO = ro;
+  }
+
   function renderWidget(section) {
     var body = $("[data-widget-body]", section);
     if (!body) { return; }
     var type = section.getAttribute("data-widget-type") || "";
+    if (SIZE_AWARE[type]) { watchBodySize(section, body); }
     var cfg = {};
     try { cfg = JSON.parse(section.getAttribute("data-widget-config") || "{}"); } catch (e) { cfg = {}; }
     var fn = RENDERERS[type];

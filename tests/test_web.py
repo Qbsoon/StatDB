@@ -531,3 +531,88 @@ async def test_widget_type_friendly_names(config, client):
     assert "Tabela danych" in html
     # dropdown tworzenia widżetu też używa przyjaznych nazw
     assert ">KPI: Suma<" in html or "KPI: Suma" in html
+
+
+# ---------- §15.13-19: vertical bars, sorting, ⋯ menu, modals ----------
+
+
+async def test_widget_type_dropdown_vertical_bars(config, client):
+    """§15.13: vertical bar types available in the create form dropdown."""
+    db = Database(config.db_path)
+    vstore = ViewStore(db)
+    view = await vstore.create_view("Pionowe")
+
+    resp = await client.get(f"/views/{view['id']}")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    assert 'value="bar_vertical"' in html
+    assert 'value="stacked_bar_vertical"' in html
+    assert "Pionowy wykres słupkowy" in html
+    assert "Pionowy wykres słupkowy segmentowany" in html
+
+
+async def test_widget_forms_have_sorting(config, client):
+    """§15.15: sort_by / sort_dir selects present in create + edit forms."""
+    db = Database(config.db_path)
+    vstore = ViewStore(db)
+    view = await vstore.create_view("Sortowanie")
+
+    resp = await client.get(f"/views/{view['id']}")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    for fid in ("wc-sortby", "wc-sortdir", "we-sortby", "we-sortdir"):
+        assert f'id="{fid}"' in html
+    assert "Kolejność domyślna" in html
+    assert "Rosnąco" in html
+    assert "Malejąco" in html
+
+
+async def test_widget_modal_markup(config, client):
+    """§15.17-19: add/edit/settings forms live in modal overlays opened by
+    toolbar buttons, not inline below the grid."""
+    db = Database(config.db_path)
+    vstore = ViewStore(db)
+    view = await vstore.create_view("Modale")
+
+    resp = await client.get(f"/views/{view['id']}")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    for mid in ("widget-create-modal", "widget-edit-modal", "view-settings-modal"):
+        assert f'id="{mid}"' in html
+        assert 'class="modal-overlay"' in html
+    # przyciski otwierające w nagłówku
+    assert 'data-modal-open="widget-create-modal"' in html
+    assert 'data-modal-open="view-settings-modal"' in html
+
+
+async def test_view_rename_route(config, client):
+    """§15.16: POST /views/<id>/rename renames the view (404 when missing)."""
+    db = Database(config.db_path)
+    vstore = ViewStore(db)
+    view = await vstore.create_view("Stara nazwa")
+
+    resp = await client.post(f"/views/{view['id']}/rename", form={"name": "Nowa nazwa"})
+    assert resp.status_code in (301, 302)
+    assert (await vstore.get_view(view["id"]))["name"] == "Nowa nazwa"
+
+    # pusta nazwa → bez zmian
+    resp = await client.post(f"/views/{view['id']}/rename", form={"name": "   "})
+    assert resp.status_code in (301, 302)
+    assert (await vstore.get_view(view["id"]))["name"] == "Nowa nazwa"
+
+    resp = await client.post("/views/9999/rename", form={"name": "x"})
+    assert resp.status_code == 404
+
+
+async def test_views_list_card_menu(config, client):
+    """§15.16: delete/rename hide behind the ⋯ card menu on the views list."""
+    db = Database(config.db_path)
+    vstore = ViewStore(db)
+    view = await vstore.create_view("Z menu")
+
+    resp = await client.get("/views")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    assert "card-menu" in html
+    assert f"/views/{view['id']}/rename" in html
+    assert f"/views/{view['id']}/delete" in html

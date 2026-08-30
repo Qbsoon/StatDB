@@ -242,7 +242,7 @@ PostgreSQL jako backend, multi-user z rolami, raporty e-mail cykliczne, widgety-
 
 ## 15. Sprawy do naprawy, wpisane przez użytkownika
 
-> **Status:** ✅ Wszystkie 12 punktów naprawione.
+> **Status:** ✅ Wszystkie 21 punktów naprawione.
 > 1. ✅ Language switcher — cookie zapisywany, ikona poprawiona (prior session).
 > 2. ✅ Usunięto wszystkie presety (datasets + column). year-month pozostaje jako typ kolumny w dropdownie.
 > 3. ✅ Usunięto surowy "Config (JSON)" — zastąpiono intuicyjnym GUI per typ kolumny.
@@ -255,4 +255,12 @@ PostgreSQL jako backend, multi-user z rolami, raporty e-mail cykliczne, widgety-
 > 10. ✅ Heatmapa — dodane pole `series` do reguł konfiguracji oraz graceful fallback `grouped → stacked`; wyraźny komunikat „Brak danych do wyświetlenia…" zamiast mylącego „Configure this widget".
 > 11. ✅ Wykres liniowy — pełny renderer: poziome linie siatki z etykietami wartości, etykiety osi X, punkty z tooltipami, legenda grup/kolorów (multi-series).
 > 12. ✅ Grupowanie złożone — `group_by` przyjmuje listę kolumn + drugi poziom „Grupuj wg (2. poziom)" w GUI widżetów; silnik agregacji obsługuje buckety złożone (np. rok + miesiąc select → chronologiczna oś miesiąc+rok; kolumny temporalne sortowane w pierwszej kolejności po stronie klienta).
-13. Powinny istnieć typy poziome i pionowe wykresu słupkowego.
+13. ✅ Pionowe warianty wykresów słupkowych — nowe typy widżetów `bar_vertical` i `stacked_bar_vertical` (styl Excela: etykiety na dole, pionowe słupki, automatycznie wyliczane checkpointy wartości w legendzie po lewej).
+14. ✅ Etykiety zgrupowania — `text-overflow: ellipsis` + `title` z pełnym tekstem (tooltip na hover), kolumna etykiet bierze tyle miejsca, ile potrzebuje.
+15. ✅ Sortowanie wyników — pola "Sortuj według" (domyślna kolejność / etykiety zgrupowania A→Z / wartość miary) i "Rosnąco/Malejąco" w GUI dodawania i edycji widżetu (`sort_by`/`sort_dir` w config, sortowanie po stronie klienta; "default" = zachowanie sprzed zmiany).
+16. ✅ Usuwanie i rename widoku schowane za menu ⋯ (`details.card-menu`) na liście widoków + rename też w nagłówku strony widoku (POST `/views/<id>/rename`).
+17. ✅ Add widget jako modal — `widget-create-modal` nad siatką z przyciemnionym tłem (`modal-overlay`), zamykany kliknięciem w tło / ✕ / Esc.
+18. ✅ Edit widget jako modal — `widget-edit-modal` działa identycznie jak Add widget (pkt 17).
+19. ✅ View settings jako modal — `view-settings-modal` otwierany przyciskiem ⚙ w toolbarze.
+20. ✅ Wykresy SVG (line/pie/heatmap/słupki pionowe) skalują się do rozmiaru widżetu — `flex: 1` w `.widget-body` zamiast stałego `max-height: 240px`; zawartość viewBox rośnie proporcjonalnie z widżetem.
+21. ✅ Heatmapa i line chart — renderery są teraz świadome rozmiaru kontenera (`bodySize`): line chart renderuje się dokładnie w wymiarach ciała widżetu (a przy wielu punktach trzyma min. 34px/pkt i przewija poziomo), heatmapa skaluje się w górę gdy jest miejsce, ale nigdy poniżej naturalnego rozmiaru (czytelne komórki) — nadmiar przewija się w ciele widżetu (`overflow: auto`). Dodany `ResizeObserver` (debounce 200ms, tylko typy `line`/`heatmap`) przerenderowuje wykres po zmianie rozmiaru widżetu. Później ten sam mechanizm rozszerzony na pionowe słupki (`bar_vertical`/`stacked_bar_vertical`): wypełniają widżet, trzymają min. 30px/słupek (nadmiar → scroll poziomy), etykiety osi X przerzedzane wg faktycznej szerokości słupka, re-render po resize.

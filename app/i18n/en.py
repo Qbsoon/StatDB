@@ -86,7 +86,9 @@ STRINGS = {
     "views.wtype.table": "Data table",
     "views.wtype.form": "Add record form",
     "views.wtype.bar": "Bar chart",
+    "views.wtype.bar_vertical": "Vertical bar chart",
     "views.wtype.stacked_bar": "Stacked bar chart",
+    "views.wtype.stacked_bar_vertical": "Vertical stacked bar chart",
     "views.wtype.line": "Line chart",
     "views.wtype.pie": "Pie / donut chart",
     "views.wtype.heatmap": "Heatmap",
@@ -111,6 +113,19 @@ STRINGS = {
     "views.kiosk_btn": "📺 Kiosk",
     "views.kiosk_exit": "Exit kiosk",
     "views.save_settings": "Save settings",
+
+    # sorting (todo §15.15)
+    "views.widget_sort_by": "Sort by",
+    "views.sort_default": "Default order",
+    "views.sort_label": "Grouping label (A→Z)",
+    "views.sort_value": "Measure value",
+    "views.sort_dir": "Direction",
+    "views.sort_asc": "Ascending",
+    "views.sort_desc": "Descending",
+    "views.menu": "Menu",
+    "views.rename": "Rename",
+    "views.rename_title": "Rename view",
+    "views.rename_btn": "Save name",
 
     # transfer (F10)
     "nav.transfer": "Transfer",

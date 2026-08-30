@@ -12,12 +12,21 @@
 {% endblock %}
 {% block content %}
 <div class="narrow">
-  <p><a href="{{ url_for('web.views') }}">{{ t("views.back") }}</a> · <button type="button" id="kiosk-toggle" class="btn-link">{{ t("views.kiosk_btn") }}</button></p>
-  <h1>{{ view.name }}</h1>
-  <form method="post" action="{{ url_for('web.view_delete', view_id=view.id) }}"
-        onsubmit="return confirm({{ t('views.confirm_delete_view', name=view.name) | tojson | e }});">
-    <button type="submit" class="danger">{{ t("views.delete_view_btn") }}</button>
-  </form>
+  <p>
+    <a href="{{ url_for('web.views') }}">{{ t("views.back") }}</a> ·
+    <button type="button" id="kiosk-toggle" class="btn-link">{{ t("views.kiosk_btn") }}</button>
+  </p>
+  <div class="view-toolbar">
+    <h1>{{ view.name }}</h1>
+    <span class="view-toolbar-actions">
+      <button type="button" class="kiosk-hide" data-modal-open="widget-create-modal">➕ {{ t("views.add_widget") }}</button>
+      <button type="button" class="kiosk-hide" data-modal-open="view-settings-modal">⚙ {{ t("views.settings") }}</button>
+      <form method="post" action="{{ url_for('web.view_delete', view_id=view.id) }}" class="inline-form kiosk-hide"
+            onsubmit="return confirm({{ t('views.confirm_delete_view', name=view.name) | tojson | e }});">
+        <button type="submit" class="danger small">{{ t("views.delete_view_btn") }}</button>
+      </form>
+    </span>
+  </div>
   {% if g.statdb_has_password %}
   <p class="public-link-row">
     <a href="/public/views/{{ view.id }}" target="_blank">{{ t("auth.public_link") }}</a>
@@ -61,53 +70,73 @@
   {% endfor %}
 </div>
 
-<div class="narrow">
-  <h2>{{ t("views.add_widget") }}</h2>
-  <form id="widget-create-form" method="post" action="{{ url_for('web.widget_create', view_id=view.id, next=request.path) }}" class="widget-form">
-    <label>{{ t("views.add_widget_type") }}
-      <select name="type" id="wc-type">
-        {% for wtype in widget_types %}<option value="{{ wtype }}">{{ t("views.wtype." ~ wtype) }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>{{ t("views.add_widget_title") }}
-      <input name="title" id="wc-title">
-    </label>
-    <label data-field="dataset">{{ t("views.add_widget_dataset") }}
-      <select name="dataset_id" id="wc-dataset">
-        <option value=""></option>
-        {% for ds in datasets %}<option value="{{ ds.id }}">{{ ds.name }} ({{ ds.slug }})</option>{% endfor %}
-      </select>
-    </label>
-    <label data-field="column">{{ t("views.widget_value_column") }}
-      <select name="column" id="wc-column"><option value=""></option></select>
-    </label>
-    <label data-field="measure">{{ t("views.widget_measure") }}
-      <select name="measure" id="wc-measure">
-        <option value="sum">sum</option>
-        <option value="avg">avg</option>
-        <option value="count">count</option>
-        <option value="min">min</option>
-        <option value="max">max</option>
-        <option value="median">median</option>
-      </select>
-    </label>
-    <label data-field="group_by">{{ t("views.widget_group_by") }}
-      <select name="group_by" id="wc-groupby"><option value=""></option></select>
-    </label>
-    <label data-field="group_by_2">{{ t("views.widget_group_by_2") }}
-      <select name="group_by_2" id="wc-groupby2"><option value=""></option></select>
-    </label>
-    <label data-field="series">{{ t("views.widget_series") }}
-      <select name="series" id="wc-series"><option value=""></option></select>
-    </label>
-    <label data-field="text">{{ t("views.widget_note_text") }}
-      <textarea name="text" id="wc-text" rows="2"></textarea>
-    </label>
-    <input type="hidden" name="config" id="wc-config" value="">
-    <button type="submit">{{ t("records.add_btn") }}</button>
-  </form>
+<!-- todo §15.17: Add widget pops up as a modal over a dimmed backdrop -->
+<div class="modal-overlay" id="widget-create-modal" hidden>
+  <div class="modal">
+    <h2>{{ t("views.add_widget") }}</h2>
+    <form id="widget-create-form" method="post" action="{{ url_for('web.widget_create', view_id=view.id, next=request.path) }}" class="widget-form">
+      <label>{{ t("views.add_widget_type") }}
+        <select name="type" id="wc-type">
+          {% for wtype in widget_types %}<option value="{{ wtype }}">{{ t("views.wtype." ~ wtype) }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>{{ t("views.add_widget_title") }}
+        <input name="title" id="wc-title">
+      </label>
+      <label data-field="dataset">{{ t("views.add_widget_dataset") }}
+        <select name="dataset_id" id="wc-dataset">
+          <option value=""></option>
+          {% for ds in datasets %}<option value="{{ ds.id }}">{{ ds.name }} ({{ ds.slug }})</option>{% endfor %}
+        </select>
+      </label>
+      <label data-field="column">{{ t("views.widget_value_column") }}
+        <select name="column" id="wc-column"><option value=""></option></select>
+      </label>
+      <label data-field="measure">{{ t("views.widget_measure") }}
+        <select name="measure" id="wc-measure">
+          <option value="sum">sum</option>
+          <option value="avg">avg</option>
+          <option value="count">count</option>
+          <option value="min">min</option>
+          <option value="max">max</option>
+          <option value="median">median</option>
+        </select>
+      </label>
+      <label data-field="group_by">{{ t("views.widget_group_by") }}
+        <select name="group_by" id="wc-groupby"><option value=""></option></select>
+      </label>
+      <label data-field="group_by_2">{{ t("views.widget_group_by_2") }}
+        <select name="group_by_2" id="wc-groupby2"><option value=""></option></select>
+      </label>
+      <label data-field="series">{{ t("views.widget_series") }}
+        <select name="series" id="wc-series"><option value=""></option></select>
+      </label>
+      <label data-field="sort_by">{{ t("views.widget_sort_by") }}
+        <select name="sort_by" id="wc-sortby">
+          <option value="default">{{ t("views.sort_default") }}</option>
+          <option value="label">{{ t("views.sort_label") }}</option>
+          <option value="value">{{ t("views.sort_value") }}</option>
+        </select>
+      </label>
+      <label data-field="sort_dir">{{ t("views.sort_dir") }}
+        <select name="sort_dir" id="wc-sortdir">
+          <option value="asc">{{ t("views.sort_asc") }}</option>
+          <option value="desc">{{ t("views.sort_desc") }}</option>
+        </select>
+      </label>
+      <label data-field="text">{{ t("views.widget_note_text") }}
+        <textarea name="text" id="wc-text" rows="2"></textarea>
+      </label>
+      <input type="hidden" name="config" id="wc-config" value="">
+      <button type="submit">{{ t("records.add_btn") }}</button>
+      <button type="button" data-modal-close>{{ t("datasets.cancel_btn") }}</button>
+    </form>
+  </div>
+</div>
 
-  <div id="widget-edit-section" hidden>
+<!-- todo §15.18: Edit widget works like Add widget — a modal over the grid -->
+<div class="modal-overlay" id="widget-edit-modal" hidden>
+  <div class="modal">
     <h2>{{ t("views.edit_widget") }}</h2>
     <form id="widget-edit-form" method="post" action="{{ url_for('web.widget_update', view_id=view.id, widget_id=0, next=request.path) }}" class="widget-form">
       <input type="hidden" id="we-type" value="">
@@ -142,6 +171,19 @@
       <label data-field="series">{{ t("views.widget_series") }}
         <select name="series" id="we-series"><option value=""></option></select>
       </label>
+      <label data-field="sort_by">{{ t("views.widget_sort_by") }}
+        <select name="sort_by" id="we-sortby">
+          <option value="default">{{ t("views.sort_default") }}</option>
+          <option value="label">{{ t("views.sort_label") }}</option>
+          <option value="value">{{ t("views.sort_value") }}</option>
+        </select>
+      </label>
+      <label data-field="sort_dir">{{ t("views.sort_dir") }}
+        <select name="sort_dir" id="we-sortdir">
+          <option value="asc">{{ t("views.sort_asc") }}</option>
+          <option value="desc">{{ t("views.sort_desc") }}</option>
+        </select>
+      </label>
       <label data-field="text">{{ t("views.widget_note_text") }}
         <textarea name="text" id="we-text" rows="2"></textarea>
       </label>
@@ -150,23 +192,29 @@
       <button type="button" id="widget-edit-cancel">{{ t("datasets.cancel_btn") }}</button>
     </form>
   </div>
+</div>
 
-  <h2>{{ t("views.settings") }}</h2>
-  <form id="view-settings-form" method="post" action="{{ url_for('web.view_settings_save', view_id=view.id) }}">
-    <label>{{ t("views.custom_css") }}
-      <textarea name="custom_css" class="mono" rows="6" placeholder="{{ t('views.custom_css_hint') }}">{{ (view.settings or {}).get('custom_css', '') }}</textarea>
-    </label>
-    <div class="settings-row">
-      <label class="field-inline">{{ t("views.refresh") }}
-        <input type="number" name="refresh" min="0" max="3600" value="{{ (view.settings or {}).get('refresh', 0) }}">
+<!-- todo §15.19: View settings in a modal, opened from the toolbar button -->
+<div class="modal-overlay" id="view-settings-modal" hidden>
+  <div class="modal">
+    <h2>{{ t("views.settings") }}</h2>
+    <form id="view-settings-form" method="post" action="{{ url_for('web.view_settings_save', view_id=view.id) }}">
+      <label>{{ t("views.custom_css") }}
+        <textarea name="custom_css" class="mono" rows="6" placeholder="{{ t('views.custom_css_hint') }}">{{ (view.settings or {}).get('custom_css', '') }}</textarea>
       </label>
-      <label class="check-label">
-        <input type="checkbox" name="kiosk" value="1" {% if (view.settings or {}).get('kiosk') %}checked{% endif %}>
-        {{ t("views.kiosk") }}
-      </label>
-      <button type="submit">{{ t("views.save_settings") }}</button>
-    </div>
-  </form>
+      <div class="settings-row">
+        <label class="field-inline">{{ t("views.refresh") }}
+          <input type="number" name="refresh" min="0" max="3600" value="{{ (view.settings or {}).get('refresh', 0) }}">
+        </label>
+        <label class="check-label">
+          <input type="checkbox" name="kiosk" value="1" {% if (view.settings or {}).get('kiosk') %}checked{% endif %}>
+          {{ t("views.kiosk") }}
+        </label>
+        <button type="submit">{{ t("views.save_settings") }}</button>
+        <button type="button" data-modal-close>{{ t("datasets.cancel_btn") }}</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <script id="datasets-json" type="application/json">{{ datasets_json | tojson }}</script>

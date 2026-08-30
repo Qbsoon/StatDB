@@ -17,8 +17,10 @@ from ..db import Database, row_to_dict
 WIDGET_TYPES = {
     "table",            # data table (rows, inline edit)
     "form",             # insert-form widget
-    "bar",              # single-series bar chart
-    "stacked_bar",      # stacked bar (group × series)
+    "bar",              # single-series bar chart (horizontal)
+    "stacked_bar",      # stacked bar (group × series, horizontal)
+    "bar_vertical",     # vertical bar chart, Excel-style (todo §15.13)
+    "stacked_bar_vertical",  # vertical stacked bar (todo §15.13)
     "line",             # line chart
     "pie",              # pie / donut
     "heatmap",          # heatmap (e.g. month × year)

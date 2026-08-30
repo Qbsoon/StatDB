@@ -137,6 +137,16 @@ async def view_delete(view_id: int):
     return redirect("/views")
 
 
+@bp.route("/views/<int:view_id>/rename", methods=["POST"])
+async def view_rename(view_id: int):
+    """Rename a view from the ⋯ card menu — todo §15.16."""
+    store, view = await _views_ctx(view_id)
+    name = str((await request.form).get("name", "")).strip()
+    if name:
+        await store.update_view(view["id"], name=name)
+    return redirect("/views")
+
+
 # ---------- widgets (F8) ----------
 
 def _widget_config_from_form(form) -> dict[str, Any]:

@@ -86,7 +86,9 @@ STRINGS = {
     "views.wtype.table": "Tabela danych",
     "views.wtype.form": "Formularz dodawania",
     "views.wtype.bar": "Wykres słupkowy",
+    "views.wtype.bar_vertical": "Pionowy wykres słupkowy",
     "views.wtype.stacked_bar": "Wykres słupkowy segmentowany",
+    "views.wtype.stacked_bar_vertical": "Pionowy wykres słupkowy segmentowany",
     "views.wtype.line": "Wykres liniowy",
     "views.wtype.pie": "Wykres kołowy / donut",
     "views.wtype.heatmap": "Mapa cieplna",
@@ -112,6 +114,19 @@ STRINGS = {
     "views.kiosk_btn": "📺 Kiosk",
     "views.kiosk_exit": "Wyjdź z kiosku",
     "views.save_settings": "Zapisz ustawienia",
+
+    # sortowanie (todo §15.15)
+    "views.widget_sort_by": "Sortuj według",
+    "views.sort_default": "Kolejność domyślna",
+    "views.sort_label": "Etykiety zgrupowania (A→Z)",
+    "views.sort_value": "Wartość miary",
+    "views.sort_dir": "Kierunek",
+    "views.sort_asc": "Rosnąco",
+    "views.sort_desc": "Malejąco",
+    "views.menu": "Menu",
+    "views.rename": "Zmień nazwę",
+    "views.rename_title": "Zmień nazwę widoku",
+    "views.rename_btn": "Zapisz nazwę",
 
     # transfer (F10)
     "nav.transfer": "Transfer",
