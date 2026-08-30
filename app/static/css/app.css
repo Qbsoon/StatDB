@@ -272,8 +272,28 @@ h3 { font-size: 16px; margin: 20px 0 8px; }
 .widget-line, .widget-pie, .widget-heatmap { width: 100%; height: auto; max-height: 240px; }
 .widget-heatmap .hm-label { font-size: 9px; fill: var(--fg-muted); }
 
+.widget-line .axis-label { font-size: 9px; fill: var(--fg-muted); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 11px; color: var(--fg-muted); }
+.chart-legend-item { display: inline-flex; align-items: center; gap: 4px; }
+.chart-legend-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
 .widget-agg-table { font-size: 13px; }
 .widget-agg-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* data table widget (§15.9) */
+.widget-table { overflow-x: auto; }
+.widget-table table { font-size: 12px; }
+.widget-table-foot { margin-top: 4px; }
+
+/* add-record form widget (§15.9) */
+.widget-form-fields { display: flex; flex-direction: column; gap: 6px; }
+.widget-form-label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--fg-muted); }
+.widget-form-label input, .widget-form-label select, .widget-form-label textarea {
+  padding: 4px 8px; font-size: 13px; font-family: inherit;
+}
+
+/* inline delete-view form on the views list */
+.inline-form { display: inline; margin-left: auto; }
 
 .widget-gfilter { display: flex; gap: 6px; align-items: center; }
 .widget-gfilter input { flex: 1; padding: 4px 8px; font-size: 13px; }

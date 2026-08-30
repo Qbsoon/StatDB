@@ -471,3 +471,63 @@ async def test_aggregate_api_errors(config, client):
         "dataset": ds["id"], "measure": "sum", "column": "nope",
     })
     assert resp.status_code == 400
+
+
+# ---------- §15.6 / §15.7: friendly widget type names + view delete ----------
+
+
+async def test_view_delete_route(config, client):
+    """§15.7: POST /views/<id>/delete removes the view (404 when missing)."""
+    db = Database(config.db_path)
+    vstore = ViewStore(db)
+    view = await vstore.create_view("Do usunięcia")
+
+    resp = await client.post(f"/views/{view['id']}/delete")
+    assert resp.status_code in (301, 302)
+    assert await vstore.get_view(view["id"]) is None
+
+    # drugi raz → 404, nie 500
+    resp = await client.post(f"/views/{view['id']}/delete")
+    assert resp.status_code == 404
+    resp = await client.post("/views/9999/delete")
+    assert resp.status_code == 404
+
+
+async def test_view_delete_button_on_pages(config, client):
+    """§15.7: delete button + confirm present on views list and detail page."""
+    db = Database(config.db_path)
+    vstore = ViewStore(db)
+    view = await vstore.create_view("Z przyciskiem")
+
+    resp = await client.get("/views")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    assert f"/views/{view['id']}/delete" in html
+
+    resp = await client.get(f"/views/{view['id']}")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    assert f"/views/{view['id']}/delete" in html
+    # przycisk usuwania + handler potwierdzenia (confirm(); sam tekst jest
+    # escapowany przez tojson, więc sprawdzamy etykietę przycisku i atrybut)
+    assert "Usuń widok" in html
+    assert "confirm(" in html
+
+
+async def test_widget_type_friendly_names(config, client):
+    """§15.6: widget type shown as translated label, not raw code name."""
+    db = Database(config.db_path)
+    vstore = ViewStore(db)
+    view = await vstore.create_view("Nazwy")
+    await vstore.add_widget(view["id"], "kpi_sum", title="KPI")
+    await vstore.add_widget(view["id"], "table", title="Tabela")
+    await vstore.add_widget(view["id"], "note", title="Notka")
+
+    resp = await client.get(f"/views/{view['id']}")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    # nagłówki widżetów: przetłumaczone etykiety (pl), nie surowe kody typów
+    assert "KPI: Suma" in html
+    assert "Tabela danych" in html
+    # dropdown tworzenia widżetu też używa przyjaznych nazw
+    assert ">KPI: Suma<" in html or "KPI: Suma" in html

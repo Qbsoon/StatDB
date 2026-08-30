@@ -14,6 +14,10 @@
 <div class="narrow">
   <p><a href="{{ url_for('web.views') }}">{{ t("views.back") }}</a> · <button type="button" id="kiosk-toggle" class="btn-link">{{ t("views.kiosk_btn") }}</button></p>
   <h1>{{ view.name }}</h1>
+  <form method="post" action="{{ url_for('web.view_delete', view_id=view.id) }}"
+        onsubmit="return confirm({{ t('views.confirm_delete_view', name=view.name) | tojson | e }});">
+    <button type="submit" class="danger">{{ t("views.delete_view_btn") }}</button>
+  </form>
   {% if g.statdb_has_password %}
   <p class="public-link-row">
     <a href="/public/views/{{ view.id }}" target="_blank">{{ t("auth.public_link") }}</a>
@@ -27,7 +31,9 @@
        data-settings='{{ (view.settings or {}) | tojson }}'
        data-kiosk-exit="{{ t('views.kiosk_exit') }}"
        data-no-dataset="{{ t('views.widget_no_dataset') }}"
-       data-no-renderer="{{ t('views.widget_no_renderer') }}"></div>
+       data-no-renderer="{{ t('views.widget_no_renderer') }}"
+       data-no-data="{{ t('views.widget_no_data') }}"
+       data-table-rows="{{ t('views.table_rows_shown') }}"></div>
 
   {% if not view.widgets %}
     <p class="muted">{{ t("views.no_widgets") }}</p>
@@ -41,7 +47,7 @@
         <section class="widget" data-widget-type="{{ w.type }}" data-widget-config='{{ w.config | tojson }}'>
           <header class="widget-header" title="{{ t('views.widget_drag_hint') }}">
             <span class="widget-title">{{ w.title or t("views.widget_title_fallback") }}</span>
-            <span class="widget-type">{{ w.type }}</span>
+            <span class="widget-type">{{ t("views.wtype." ~ w.type) }}</span>
             <button type="button" class="widget-edit widget-icon" title="{{ t('views.widget_edit') }}">&#9998;</button>
             <button type="button" class="widget-delete widget-icon danger" title="{{ t('views.widget_delete') }}">&#10005;</button>
           </header>
@@ -60,7 +66,7 @@
   <form id="widget-create-form" method="post" action="{{ url_for('web.widget_create', view_id=view.id, next=request.path) }}" class="widget-form">
     <label>{{ t("views.add_widget_type") }}
       <select name="type" id="wc-type">
-        {% for wtype in widget_types %}<option value="{{ wtype }}">{{ wtype }}</option>{% endfor %}
+        {% for wtype in widget_types %}<option value="{{ wtype }}">{{ t("views.wtype." ~ wtype) }}</option>{% endfor %}
       </select>
     </label>
     <label>{{ t("views.add_widget_title") }}
@@ -87,6 +93,9 @@
     </label>
     <label data-field="group_by">{{ t("views.widget_group_by") }}
       <select name="group_by" id="wc-groupby"><option value=""></option></select>
+    </label>
+    <label data-field="group_by_2">{{ t("views.widget_group_by_2") }}
+      <select name="group_by_2" id="wc-groupby2"><option value=""></option></select>
     </label>
     <label data-field="series">{{ t("views.widget_series") }}
       <select name="series" id="wc-series"><option value=""></option></select>
@@ -126,6 +135,9 @@
       </label>
       <label data-field="group_by">{{ t("views.widget_group_by") }}
         <select name="group_by" id="we-groupby"><option value=""></option></select>
+      </label>
+      <label data-field="group_by_2">{{ t("views.widget_group_by_2") }}
+        <select name="group_by_2" id="we-groupby2"><option value=""></option></select>
       </label>
       <label data-field="series">{{ t("views.widget_series") }}
         <select name="series" id="we-series"><option value=""></option></select>

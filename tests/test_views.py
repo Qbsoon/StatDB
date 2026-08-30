@@ -80,6 +80,31 @@ async def test_widget_lifecycle(views_db):
         await store.delete_widget(w2["id"])
 
 
+async def test_widget_auto_placement_free_slot(views_db):
+    """§15.8: widgets without pinned geometry land in the first empty grid
+    slot instead of stacking at (0,0) over existing widgets."""
+    store = ViewStore(views_db)
+    view = await store.create_view("Board")
+
+    w1 = await store.add_widget(view["id"], "bar", geometry={"x": 0, "y": 0, "w": 6, "h": 4})
+    assert (w1["x"], w1["y"]) == (0, 0)
+
+    w2 = await store.add_widget(view["id"], "kpi_sum")  # default 6x4 → right of w1
+    assert (w2["x"], w2["y"]) == (6, 0)
+
+    w3 = await store.add_widget(view["id"], "table", geometry={"w": 8, "h": 4})
+    # rows 0-3 fully occupied (w1+w2 span x 0-11) → next row
+    assert (w3["x"], w3["y"]) == (0, 4)
+
+    w4 = await store.add_widget(view["id"], "note", geometry={"w": 4, "h": 2})
+    # fits in the remaining 4 columns beside w3
+    assert (w4["x"], w4["y"]) == (8, 4)
+
+    # explicit x/y still respected (no auto-placement)
+    w5 = await store.add_widget(view["id"], "note", geometry={"x": 2, "y": 4, "w": 4, "h": 2})
+    assert (w5["x"], w5["y"]) == (2, 4)
+
+
 async def test_layout_bulk_save(views_db):
     store = ViewStore(views_db)
     view = await store.create_view("Board")

@@ -18,7 +18,7 @@ from quart import (
 from typing import Any
 
 from ..catalog.store import CatalogStore
-from ..catalog.types import COLUMN_TYPES
+from ..catalog.types import COLUMN_TYPES, option_label
 from ..db import get_db
 from ..i18n import COOKIE_NAME, SUPPORTED, make_translator, resolve_language
 from ..rows.store import RowStore
@@ -63,7 +63,31 @@ async def public_view(vid: int):
     if not view:
         abort(404)
     view["widgets"] = await store.list_widgets(vid)
-    return await render_template("public_view.html", view=view)
+    return await render_template(
+        "public_view.html",
+        view=view,
+        datasets_json=await _datasets_payload(),
+    )
+
+
+async def _datasets_payload() -> list[dict[str, Any]]:
+    """Client-side dataset metadata: column key/label/type + select options
+    (labels localized) — used by widget renderers (table/form/labels)."""
+    lang = getattr(g, "lang", "en")
+    datasets = await CatalogStore(get_db()).list_datasets()
+    out: list[dict[str, Any]] = []
+    for ds in datasets:
+        cols: list[dict[str, Any]] = []
+        for c in ds.get("columns", []):
+            col = {"key": c["key"], "label": c["label"] or c["key"], "type": c["type"]}
+            if c["type"] == "select":
+                col["options"] = [
+                    {"key": o.get("key"), "label": option_label(o, lang)}
+                    for o in (c.get("config") or {}).get("options") or []
+                ]
+            cols.append(col)
+        out.append({"id": ds["id"], "columns": cols})
+    return out
 
 
 @bp.route("/views")
@@ -83,21 +107,11 @@ async def view_detail(view_id: int):
         abort(404)
     view["widgets"] = await store.list_widgets(view_id)
     datasets = await CatalogStore(get_db()).list_datasets()
-    datasets_json = [
-        {
-            "id": ds["id"],
-            "columns": [
-                {"key": c["key"], "label": c["label"] or c["key"], "type": c["type"]}
-                for c in ds.get("columns", [])
-            ],
-        }
-        for ds in datasets
-    ]
     return await render_template(
         "view_detail.html",
         view=view,
         datasets=datasets,
-        datasets_json=datasets_json,
+        datasets_json=await _datasets_payload(),
         widget_types=sorted(WIDGET_TYPES),
     )
 
@@ -110,6 +124,17 @@ async def view_create():
         name=str(form.get("name", "")),
     )
     return redirect(f"/views/{view['id']}")
+
+
+@bp.route("/views/<int:view_id>/delete", methods=["POST"])
+async def view_delete(view_id: int):
+    """Delete a whole view (+ its widgets via FK cascade) — todo §15.7."""
+    store = ViewStore(get_db())
+    try:
+        await store.delete_view(view_id)
+    except KeyError:
+        abort(404)
+    return redirect("/views")
 
 
 # ---------- widgets (F8) ----------

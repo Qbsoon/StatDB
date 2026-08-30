@@ -139,6 +139,29 @@ class ViewStore:
 
     # ---------- widgets ----------
 
+    async def _free_slot(self, view_id: int, w: int, h: int) -> tuple[int, int]:
+        """First free slot on the 12-col grid (todo §15.8: new widgets land
+        in empty space instead of stacking on top of existing ones)."""
+        rows = await self.db.query_all(
+            "SELECT x, y, w, h FROM widgets WHERE view_id = ?", (view_id,)
+        )
+        used: set[tuple[int, int]] = set()
+        max_y = 0
+        for r in rows:
+            max_y = max(max_y, int(r["y"]) + int(r["h"]))
+            for x in range(int(r["x"]), int(r["x"]) + int(r["w"])):
+                for y in range(int(r["y"]), int(r["y"]) + int(r["h"])):
+                    used.add((x, y))
+        for y in range(0, max_y + 25):
+            for x in range(0, 12 - w + 1):
+                if all(
+                    (x + i, y + j) not in used
+                    for i in range(w)
+                    for j in range(h)
+                ):
+                    return x, y
+        return 0, max_y
+
     async def add_widget(
         self,
         view_id: int,
@@ -151,7 +174,11 @@ class ViewStore:
         widget_type = widget_type.strip()
         if widget_type not in WIDGET_TYPES:
             raise ValueError(f"unknown widget type '{widget_type}'")
-        geom = self._geom(geometry or {})
+        geometry = geometry or {}
+        geom = self._geom(geometry)
+        # auto-place in the first empty grid slot unless the caller pinned x/y
+        if "x" not in geometry and "y" not in geometry:
+            geom["x"], geom["y"] = await self._free_slot(view_id, geom["w"], geom["h"])
         # append after existing widgets unless caller pins a position
         if not (geom.get("position")):
             row = await self.db.query_one(

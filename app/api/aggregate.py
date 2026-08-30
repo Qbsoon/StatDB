@@ -5,7 +5,11 @@ Body:
     "dataset":  <id or slug>,
     "measure":  "sum|avg|count|min|max|median",   # default "sum"
     "column":   "<measure source column>",        # required for non-count
-    "group_by": "<column key>",                   # optional
+    "group_by": "<column key>",                   # optional — or a LIST of keys
+                                                 # for a composite axis, e.g.
+                                                 # ["year", "month"]
+    "group_by_2": "<column key>",                 # convenience: appended to
+                                                 # group_by (todo §15.12)
     "series":   "<column key>",                   # optional (needs group_by)
     "filters":  {"<col>": {"<op>": <val>}},       # or list of clauses
     "lang":     "en|pl"                            # select label + months
@@ -40,10 +44,20 @@ async def run_aggregate() -> Any:
     if not dataset:
         return jsonify({"error": "dataset not found"}), 404
 
+    group_by = body.get("group_by")
+    group_by_2 = body.get("group_by_2")
+    if group_by_2:
+        if isinstance(group_by, (list, tuple)):
+            group_by = list(group_by) + [group_by_2]
+        elif group_by:
+            group_by = [group_by, group_by_2]
+        else:
+            group_by = [group_by_2]
+
     spec = {
         "measure": body.get("measure", "sum"),
         "column": body.get("column"),
-        "group_by": body.get("group_by"),
+        "group_by": group_by,
         "series": body.get("series"),
         "filters": body.get("filters"),
         "lang": body.get("lang", "en"),

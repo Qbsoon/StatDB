@@ -47,6 +47,9 @@
     if (dsEl) { datasetsData = JSON.parse(dsEl.textContent || "[]"); }
   } catch (e) { datasetsData = []; }
 
+  // Expose dataset metadata for widget renderers (labels, select options)
+  window.StatDBDatasets = datasetsData;
+
   function datasetColumns(dsId) {
     var n = parseInt(dsId, 10);
     for (var i = 0; i < datasetsData.length; i++) {
@@ -68,6 +71,8 @@
   }
 
   // Which fields each widget type needs
+  // (heatmap needs "series" so it can have two axes — issue #10 / todo §15.10;
+  //  group_by_2 = composite bucket axis, e.g. month + year — todo §15.12)
   var FIELD_RULES = {
     note:          ["text"],
     global_filter: ["dataset", "column"],
@@ -78,18 +83,18 @@
     kpi_count:     ["dataset"],
     kpi_median:    ["dataset", "column"],
     kpi_trend:     ["dataset", "column"],
-    bar:           ["dataset", "measure", "column", "group_by"],
-    stacked_bar:   ["dataset", "measure", "column", "group_by", "series"],
-    line:          ["dataset", "measure", "column", "group_by"],
+    bar:           ["dataset", "measure", "column", "group_by", "group_by_2"],
+    stacked_bar:   ["dataset", "measure", "column", "group_by", "group_by_2", "series"],
+    line:          ["dataset", "measure", "column", "group_by", "group_by_2"],
     pie:           ["dataset", "measure", "column", "group_by"],
-    heatmap:       ["dataset", "measure", "column", "group_by"],
-    agg_table:     ["dataset", "measure", "column", "group_by"],
+    heatmap:       ["dataset", "measure", "column", "group_by", "group_by_2", "series"],
+    agg_table:     ["dataset", "measure", "column", "group_by", "group_by_2"],
     table:         ["dataset"],
     form:          ["dataset"],
   };
   function visibleFields(type) { return FIELD_RULES[type] || []; }
 
-  var FIELD_ID_MAP = { dataset: "dataset", column: "column", measure: "measure", group_by: "groupby", series: "series", text: "text" };
+  var FIELD_ID_MAP = { dataset: "dataset", column: "column", measure: "measure", group_by: "groupby", group_by_2: "groupby2", series: "series", text: "text" };
 
   function updateFieldVisibility(form) {
     if (!form) { return; }
@@ -131,7 +136,7 @@
     if (!dsEl) { return; }
     dsEl.addEventListener("change", function () {
       var cols = datasetColumns(dsEl.value);
-      ["column", "groupby", "series"].forEach(function (suffix) {
+      ["column", "groupby", "groupby2", "series"].forEach(function (suffix) {
         var sel = form.querySelector("#" + prefix + "-" + suffix);
         if (sel) { populateColumns(sel, cols, ""); }
       });
@@ -172,12 +177,12 @@
       var weDs = $("#we-dataset");
       if (weDs) { weDs.value = String(cfg.dataset_id); }
       var cols = datasetColumns(cfg.dataset_id);
-      [{ s: "column", k: "column" }, { s: "groupby", k: "group_by" }, { s: "series", k: "series" }].forEach(function (m) {
+      [{ s: "column", k: "column" }, { s: "groupby", k: "group_by" }, { s: "groupby2", k: "group_by_2" }, { s: "series", k: "series" }].forEach(function (m) {
         var sel = $("#we-" + m.s);
         if (sel) { populateColumns(sel, cols, cfg[m.k] || ""); }
       });
     } else {
-      ["column", "groupby", "series"].forEach(function (suffix) {
+      ["column", "groupby", "groupby2", "series"].forEach(function (suffix) {
         var sel = $("#we-" + suffix);
         if (sel) { sel.innerHTML = '<option value=""></option>'; }
       });

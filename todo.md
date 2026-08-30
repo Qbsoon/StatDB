@@ -242,15 +242,17 @@ PostgreSQL jako backend, multi-user z rolami, raporty e-mail cykliczne, widgety-
 
 ## 15. Sprawy do naprawy, wpisane przez użytkownika
 
-> **Status:** ✅ Wszystkie 5 punktów naprawione.
+> **Status:** ✅ Wszystkie 12 punktów naprawione.
 > 1. ✅ Language switcher — cookie zapisywany, ikona poprawiona (prior session).
 > 2. ✅ Usunięto wszystkie presety (datasets + column). year-month pozostaje jako typ kolumny w dropdownie.
 > 3. ✅ Usunięto surowy "Config (JSON)" — zastąpiono intuicyjnym GUI per typ kolumny.
 > 4. ✅ Select options konfigurowane przez GUI (dodawanie/usuwanie/przesuwanie, color picker, opcjonalne tłumaczenia EN/PL).
-> 5. ✅ Domyślnie pojedynczy label (string) dla każdej opcji; EN/PL jako opcjonalne tłumaczenia (toggle).
-
-1. Domyślny język to odpowiednio EN, ale w ikonie w górnym prawym rogu pisze "PL" i klikanie w celu zmiany języka tylko odświeża stronę i nic nie robi
-2. Po wejściu w zakładkę "Datasets" widzę "Load Months preset"... Nie powinno być żadnych datasets presets. Na dodawaniu kolumny też nie powinno być "year-month preset"... TO MIAŁ BYĆ RODZAJ KOLUMNY NA LIŚCIE TYPÓW KOLUMN, A NIE JAKIŚ PRESET.
-3. Co to jest "Config (JSON)" na Column Schema??? W ogóle nie wiadomo od czego to jest i nie mam pojęcia jak mam tego użyć, albo czy to w ogóle tam potrzebne.
-4. Kompletnie nie wiadomo jak aplikacja oczekuje, że poda się opcje do wyboru do kolumny typu select. Jest niby ten config json, ale kompletnie nie wiadomo jak go użyć. Najwygodniej by było móc po prostu wprowadzić opcje poprzez jakiś przycisk "Dodaj", albo w polu tekstowym po przecinkach/średnikach. Ewentualnie jako kolekcja json []. Wszystko musi być intuicyjne, więc najlepiej jakby było konfigurowalne przez GUI, a nie przez jakiś json config.
-5. Do tego wymaganie podawania label-i en i pl to tragedia. To może być jako jakaś bardzo opcjonalna opcja tłumaczenia, ale domyślnie powinno dać się ustawić jeden label dla każdej opcji.
+> 5. ✅ Domyślnie pojedynczy label (string) dla każdej opcji; EN/PL jako opcjonalne tłumaczenia (toggle)
+> 6. ✅ Widget type names — przyjazne przetłumaczone nazwy (`views.wtype.*`, EN+PL) w dropdownie tworzenia/edycji oraz w nagłówkach widżetów, zamiast surowych kodów typów.
+> 7. ✅ Usuwanie całego widoku — przycisk „Usuń widok" z potwierdzeniem na liście widoków i stronie widoku (POST `/views/<id>/delete`, 404 dla brakującego, kaskadowe usunięcie widżetów).
+> 8. ✅ Nowe widżety lądują w pierwszym wolnym miejscu siatki (serwerowy `_free_slot`), zamiast nachodzić na istniejące; jawnie podane x/y nadal respektowane.
+> 9. ✅ Widget `table` ma pełny renderer — tabela danych z kolumnami zbioru (etykiety select, ✓/✗ dla boolean), paginacja „{shown} z {total} wierszy"; dodany też renderer `form` (dodawanie rekordów z widoku).
+> 10. ✅ Heatmapa — dodane pole `series` do reguł konfiguracji oraz graceful fallback `grouped → stacked`; wyraźny komunikat „Brak danych do wyświetlenia…" zamiast mylącego „Configure this widget".
+> 11. ✅ Wykres liniowy — pełny renderer: poziome linie siatki z etykietami wartości, etykiety osi X, punkty z tooltipami, legenda grup/kolorów (multi-series).
+> 12. ✅ Grupowanie złożone — `group_by` przyjmuje listę kolumn + drugi poziom „Grupuj wg (2. poziom)" w GUI widżetów; silnik agregacji obsługuje buckety złożone (np. rok + miesiąc select → chronologiczna oś miesiąc+rok; kolumny temporalne sortowane w pierwszej kolejności po stronie klienta).
+13. Powinny istnieć typy poziome i pionowe wykresu słupkowego.

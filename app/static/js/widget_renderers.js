@@ -22,6 +22,47 @@
 
   function clearBody(body) { while (body.firstChild) { body.removeChild(body.firstChild); } }
 
+  function datasetMeta(dsId) {
+    var list = window.StatDBDatasets;
+    if (!list) { return null; }
+    var n = parseInt(dsId, 10);
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === n) { return list[i]; }
+    }
+    return null;
+  }
+
+  function columnMeta(dsId, key) {
+    var ds = datasetMeta(dsId);
+    if (!ds) { return null; }
+    var cols = ds.columns || [];
+    for (var i = 0; i < cols.length; i++) {
+      if (cols[i].key === key) { return cols[i]; }
+    }
+    return null;
+  }
+
+  // Temporal column types first on the bucket axis — so "month (select) over
+  // year" produces a chronological x-axis (todo §15.12).
+  var TEMPORAL_TYPES = { year: 1, "year-month": 1, date: 1, "date-long": 1, datetime: 1 };
+
+  function groupByList(config) {
+    var groups = [];
+    if (config.group_by) { groups.push(String(config.group_by)); }
+    if (config.group_by_2) { groups.push(String(config.group_by_2)); }
+    if (groups.length < 2) {
+      return groups.length ? groups[0] : null;
+    }
+    var typed = groups.map(function (g) {
+      var col = columnMeta(config.dataset_id, g);
+      return { g: g, temporal: !!(col && TEMPORAL_TYPES[col.type]) };
+    });
+    var stably = typed.slice().sort(function (a, b) {
+      return (b.temporal ? 1 : 0) - (a.temporal ? 1 : 0);
+    });
+    return stably.map(function (t) { return t.g; });
+  }
+
   function renderNote(body, config) {
     var div = document.createElement("div");
     div.className = "widget-note";
@@ -34,7 +75,7 @@
       dataset: config.dataset_id,
       measure: config.measure || "sum",
       column: config.column || null,
-      group_by: config.group_by || null,
+      group_by: groupByList(config),
       series: config.series || null,
       filters: Object.assign({}, config.filters || {}),
       lang: config.lang || undefined,
@@ -130,29 +171,115 @@
   }
 
   function renderLine(body, data, config) {
-    var pts = rowsToPoints(data);
-    if (!pts.length) { return false; }
-    var w = 300, h = 140, pad = 16;
-    var values = pts.map(function (p) { return p.value; });
-    var max = Math.max.apply(null, values);
-    var min = Math.min.apply(null, values);
-    var span = (max - min) || 1;
-    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    // Supports: grouped (single series) and stacked (multi series w/ colors).
+    // Issue #11 / todo §15.11: axis labels, grid, tooltips, legend.
+    var seriesList = [];
+    if (data && data.kind === "stacked" && data.buckets && data.buckets.length) {
+      data.series.forEach(function (sr) {
+        seriesList.push({
+          label: sr.label,
+          color: sr.color || DEFAULT_COLORS[seriesList.length % DEFAULT_COLORS.length],
+          points: data.buckets.map(function (b, i) {
+            return { label: b.label, value: Number(sr.values[i]) || 0 };
+          }),
+        });
+      });
+    } else {
+      var pts = rowsToPoints(data);
+      if (!pts.length) { return false; }
+      seriesList.push({
+        label: config.column || config.measure || "",
+        color: cssVar("--accent", DEFAULT_COLORS[0]),
+        points: pts,
+      });
+    }
+    var labels = seriesList[0].points.map(function (p) { return p.label; });
+    var w = 320, h = 160, padL = 44, padR = 10, padT = 12, padB = 34;
+    var allVals = [];
+    seriesList.forEach(function (sr) { sr.points.forEach(function (p) { allVals.push(p.value); }); });
+    var max = Math.max.apply(null, allVals);
+    var min = Math.min.apply(null, allVals);
+    if (min === max) { min -= 1; max += 1; }
+    var span = max - min;
+    var iw = w - padL - padR, ih = h - padT - padB;
+    var n = labels.length;
+    var labelEvery = Math.max(1, Math.ceil(n / 10));
+    var svgNS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("class", "widget-line");
     svg.setAttribute("viewBox", "0 0 " + w + " " + h);
-    var path = "";
-    pts.forEach(function (p, i) {
-      var x = pad + (w - pad * 2) * (pts.length === 1 ? 0.5 : i / (pts.length - 1));
-      var y = h - pad - (h - pad * 2) * ((p.value - min) / span);
-      path += (i === 0 ? "M" : " L") + x.toFixed(1) + " " + y.toFixed(1);
+    var axisColor = cssVar("--fg-dim", "#888");
+    function px(i) { return padL + (n === 1 ? iw / 2 : iw * (i / (n - 1))); }
+    function py(v) { return padT + ih - ih * ((v - min) / span); }
+    // horizontal gridlines + y-axis value labels
+    for (var g = 0; g <= 4; g++) {
+      var v = min + span * g / 4;
+      var y = py(v);
+      var line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", padL); line.setAttribute("x2", w - padR);
+      line.setAttribute("y1", y); line.setAttribute("y2", y);
+      line.setAttribute("stroke", axisColor);
+      line.setAttribute("stroke-opacity", "0.25");
+      line.setAttribute("stroke-width", "1");
+      svg.appendChild(line);
+      var yt = document.createElementNS(svgNS, "text");
+      yt.setAttribute("x", padL - 6); yt.setAttribute("y", y + 3);
+      yt.setAttribute("text-anchor", "end");
+      yt.setAttribute("class", "axis-label");
+      yt.textContent = fmtNumber(Math.round(v * 100) / 100);
+      svg.appendChild(yt);
+    }
+    // x-axis labels (thinned so they don't overlap)
+    labels.forEach(function (lab, i) {
+      if (i % labelEvery !== 0 && i !== n - 1) { return; }
+      var xt = document.createElementNS(svgNS, "text");
+      xt.setAttribute("x", px(i)); xt.setAttribute("y", h - padB + 16);
+      xt.setAttribute("text-anchor", i === 0 ? "start" : (i === n - 1 ? "end" : "middle"));
+      xt.setAttribute("class", "axis-label");
+      xt.textContent = lab;
+      svg.appendChild(xt);
     });
-    var pl = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    pl.setAttribute("d", path);
-    pl.setAttribute("fill", "none");
-    pl.setAttribute("stroke", cssVar("--accent", DEFAULT_COLORS[0]));
-    pl.setAttribute("stroke-width", "2");
-    svg.appendChild(pl);
+    // series polylines + point tooltips
+    seriesList.forEach(function (sr) {
+      var path = "";
+      sr.points.forEach(function (p, i) {
+        path += (i === 0 ? "M" : " L") + px(i).toFixed(1) + " " + py(p.value).toFixed(1);
+      });
+      var pl = document.createElementNS(svgNS, "path");
+      pl.setAttribute("d", path);
+      pl.setAttribute("fill", "none");
+      pl.setAttribute("stroke", sr.color);
+      pl.setAttribute("stroke-width", "2");
+      svg.appendChild(pl);
+      sr.points.forEach(function (p, i) {
+        var c = document.createElementNS(svgNS, "circle");
+        c.setAttribute("cx", px(i).toFixed(1));
+        c.setAttribute("cy", py(p.value).toFixed(1));
+        c.setAttribute("r", "3");
+        c.setAttribute("fill", sr.color);
+        var t = document.createElementNS(svgNS, "title");
+        t.textContent = p.label + ": " + fmtNumber(p.value) + (seriesList.length > 1 ? " (" + sr.label + ")" : "");
+        c.appendChild(t);
+        svg.appendChild(c);
+      });
+    });
     body.appendChild(svg);
+    // legend for multi-series
+    if (seriesList.length > 1) {
+      var legend = document.createElement("div");
+      legend.className = "chart-legend";
+      seriesList.forEach(function (sr) {
+        var item = document.createElement("span");
+        item.className = "chart-legend-item";
+        var dot = document.createElement("span");
+        dot.className = "chart-legend-dot";
+        dot.style.background = sr.color;
+        item.appendChild(dot);
+        item.appendChild(document.createTextNode(" " + sr.label));
+        legend.appendChild(item);
+      });
+      body.appendChild(legend);
+    }
     return true;
   }
 
@@ -251,8 +378,35 @@
     header.appendChild(btn);
   }
 
+  // grouped (single-axis) result → stacked shape with one synthetic series,
+  // so heatmap/stacked widgets degrade gracefully without a series column.
+  function groupedToStacked(data) {
+    if (!data || data.kind !== "grouped" || !Array.isArray(data.items)) { return data; }
+    return {
+      kind: "stacked",
+      measure: data.measure,
+      buckets: data.items.map(function (it) {
+        return { key: it.key, label: it.label, sort: it.sort };
+      }),
+      series: [
+        {
+          key: "__value",
+          label: data.measure || "value",
+          color: null,
+          values: data.items.map(function (it) { return it.value; }),
+        },
+      ],
+    };
+  }
+
   function renderStackedBar(body, data, config) {
-    if (!data || data.kind !== "stacked" || !data.buckets.length) { return false; }
+    if (!data) { return false; }
+    if (data.kind === "grouped") {
+      // no series column configured — degrade to a single-series breakdown
+      // so the widget still renders (todo §15.10-style fallback)
+      data = groupedToStacked(data);
+    }
+    if (data.kind !== "stacked" || !data.buckets.length) { return false; }
     var buckets = data.buckets;
     var series = data.series;
     var totals = buckets.map(function (b, bi) {
@@ -292,7 +446,13 @@
   }
 
   function renderHeatmap(body, data, config) {
-    if (!data || data.kind !== "stacked" || !data.buckets.length || !data.series.length) { return false; }
+    if (!data) { return false; }
+    if (data.kind === "grouped") {
+      // no series column — fall back to a single-column heatmap instead of
+      // bailing out with a misleading "configure" note (todo §15.10)
+      data = groupedToStacked(data);
+    }
+    if (data.kind !== "stacked" || !data.buckets.length || !data.series.length) { return false; }
     var buckets = data.buckets;
     var series = data.series;
     var max = 0;
@@ -344,6 +504,167 @@
     return true;
   }
 
+  // ---- data table & add-record form (issue #9 / todo §15.9) ----
+
+  function fetchRows(config) {
+    var limit = Math.min(parseInt(config.limit, 10) || 20, 500);
+    var url = "/api/datasets/" + encodeURIComponent(config.dataset_id) +
+              "/rows?page=1&page_size=" + limit;
+    var g = window.StatDBFilter;
+    if (g && g.column && g.value !== undefined && g.value !== "" &&
+        String(g.datasetId) === String(config.dataset_id)) {
+      url += "&f." + encodeURIComponent(g.column) + "." + encodeURIComponent(g.op || "eq") +
+             "=" + encodeURIComponent(g.value);
+    }
+    return fetch(url).then(function (res) {
+      if (!res.ok) { return res.text().then(function (txt) { throw new Error(txt); }); }
+      return res.json();
+    });
+  }
+
+  function cellText(value, col) {
+    if (value === null || value === undefined) { return ""; }
+    if (col && col.type === "select" && Array.isArray(col.options)) {
+      for (var i = 0; i < col.options.length; i++) {
+        if (String(col.options[i].key) === String(value)) {
+          return col.options[i].label !== undefined ? col.options[i].label : String(value);
+        }
+      }
+      return String(value);
+    }
+    if (typeof value === "boolean") { return value ? "\u2713" : "\u2717"; }
+    return String(value);
+  }
+
+  function renderTable(body, data, config) {
+    if (!data || !Array.isArray(data.items)) { return false; }
+    var ds = datasetMeta(config.dataset_id);
+    var cols = (ds && ds.columns) || [];
+    if (!cols.length) { return false; }
+    var shown = data.items.length;
+    var total = (data.total !== undefined) ? data.total : shown;
+    var wrap = document.createElement("div");
+    wrap.className = "widget-table";
+    var table = document.createElement("table");
+    table.className = "table";
+    var thead = document.createElement("thead");
+    var trH = document.createElement("tr");
+    cols.forEach(function (c) {
+      var th = document.createElement("th");
+      th.textContent = c.label || c.key;
+      trH.appendChild(th);
+    });
+    thead.appendChild(trH);
+    table.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    data.items.forEach(function (row) {
+      var tr = document.createElement("tr");
+      cols.forEach(function (c) {
+        var td = document.createElement("td");
+        td.textContent = cellText(row[c.key], c);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    if (total > shown || total > 0) {
+      var foot = document.createElement("div");
+      foot.className = "muted small widget-table-foot";
+      foot.textContent = cfgMsg("data-table-rows", "{shown} of {total} rows")
+        .replace("{shown}", String(shown)).replace("{total}", String(total));
+      wrap.appendChild(foot);
+    }
+    body.appendChild(wrap);
+    return true;
+  }
+
+  function renderForm(body, config) {
+    var ds = datasetMeta(config.dataset_id);
+    var cols = (ds && ds.columns) || [];
+    if (!cols.length) { return false; }
+    var wrap = document.createElement("div");
+    wrap.className = "widget-form";
+    var form = document.createElement("form");
+    form.className = "widget-form-fields";
+    var msg = document.createElement("div");
+    msg.className = "muted small";
+    cols.forEach(function (c) {
+      if (c.type === "formula") { return; } // computed, not editable
+      var label = document.createElement("label");
+      label.className = "widget-form-label";
+      var name = document.createElement("span");
+      name.textContent = c.label || c.key;
+      label.appendChild(name);
+      var input;
+      if (c.type === "select" && Array.isArray(c.options) && c.options.length) {
+        input = document.createElement("select");
+        var empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "—";
+        input.appendChild(empty);
+        c.options.forEach(function (o) {
+          var opt = document.createElement("option");
+          opt.value = o.key;
+          opt.textContent = o.label !== undefined ? o.label : o.key;
+          input.appendChild(opt);
+        });
+      } else if (c.type === "number" || c.type === "currency") {
+        input = document.createElement("input");
+        input.type = "number";
+        if (c.type === "currency") { input.step = "0.01"; }
+      } else if (c.type === "bool") {
+        input = document.createElement("input");
+        input.type = "checkbox";
+      } else if (c.type === "date") {
+        input = document.createElement("input");
+        input.type = "date";
+      } else if (c.type === "datetime") {
+        input = document.createElement("input");
+        input.type = "datetime-local";
+      } else {
+        input = document.createElement("input");
+        input.type = "text";
+      }
+      input.setAttribute("data-col-key", c.key);
+      input.setAttribute("data-col-type", c.type);
+      label.appendChild(input);
+      form.appendChild(label);
+    });
+    var submit = document.createElement("button");
+    submit.type = "submit";
+    submit.textContent = "+";
+    form.appendChild(submit);
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var payload = {};
+      Array.prototype.forEach.call(form.querySelectorAll("[data-col-key]"), function (el) {
+        var key = el.getAttribute("data-col-key");
+        if (el.type === "checkbox") { payload[key] = el.checked; }
+        else if (el.value !== "") {
+          if (el.type === "number") { payload[key] = Number(el.value); }
+          else { payload[key] = el.value; }
+        }
+      });
+      fetch("/api/datasets/" + encodeURIComponent(config.dataset_id) + "/rows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).then(function (res) {
+        if (!res.ok) { return res.text().then(function (txt) { throw new Error(txt); }); }
+        msg.textContent = "\u2713";
+        form.reset();
+        renderAll(document); // refresh dependent widgets
+      }).catch(function (err) {
+        msg.textContent = String(err && err.message ? err.message : "error");
+      });
+    });
+    wrap.appendChild(form);
+    wrap.appendChild(msg);
+    body.appendChild(wrap);
+    return true;
+  }
+
   function renderGlobalFilter(body, config) {
     var wrap = document.createElement("div");
     wrap.className = "widget-gfilter";
@@ -377,21 +698,23 @@
   }
 
   var RENDERERS = {
-    note: { render: renderNote },
-    global_filter: { render: renderGlobalFilter },
-    kpi_sum: { aggConfig: { measure: "sum" }, render: renderKpi, agg: true },
-    kpi_avg: { aggConfig: { measure: "avg" }, render: renderKpi, agg: true },
-    kpi_min: { aggConfig: { measure: "min" }, render: renderKpi, agg: true },
-    kpi_max: { aggConfig: { measure: "max" }, render: renderKpi, agg: true },
-    kpi_count: { aggConfig: { measure: "count" }, render: renderKpi, agg: true },
-    kpi_median: { aggConfig: { measure: "median" }, render: renderKpi, agg: true },
-    kpi_trend: { aggConfig: { measure: "sum", showTrend: true }, render: renderKpi, agg: true },
-    bar: { aggConfig: { measure: "sum" }, render: renderBar, agg: true, group: true },
-    stacked_bar: { aggConfig: { measure: "sum" }, render: renderStackedBar, agg: true },
-    line: { aggConfig: { measure: "sum" }, render: renderLine, agg: true, group: true, png: true },
-    pie: { aggConfig: { measure: "sum" }, render: renderPie, agg: true, group: true, png: true },
-    heatmap: { aggConfig: { measure: "sum" }, render: renderHeatmap, agg: true, png: true },
-    agg_table: { aggConfig: { measure: "sum" }, render: renderAggTable, agg: true, group: true },
+    note:          { render: renderNote },
+    global_filter: { render: renderGlobalFilter, needsDataset: true },
+    kpi_sum:       { aggConfig: { measure: "sum" }, render: renderKpi, agg: true },
+    kpi_avg:       { aggConfig: { measure: "avg" }, render: renderKpi, agg: true },
+    kpi_min:       { aggConfig: { measure: "min" }, render: renderKpi, agg: true },
+    kpi_max:       { aggConfig: { measure: "max" }, render: renderKpi, agg: true },
+    kpi_count:     { aggConfig: { measure: "count" }, render: renderKpi, agg: true },
+    kpi_median:    { aggConfig: { measure: "median" }, render: renderKpi, agg: true },
+    kpi_trend:     { aggConfig: { measure: "sum", showTrend: true }, render: renderKpi, agg: true },
+    bar:           { aggConfig: { measure: "sum" }, render: renderBar, agg: true, group: true },
+    stacked_bar:   { aggConfig: { measure: "sum" }, render: renderStackedBar, agg: true, png: true },
+    line:          { aggConfig: { measure: "sum" }, render: renderLine, agg: true, group: true, png: true },
+    pie:           { aggConfig: { measure: "sum" }, render: renderPie, agg: true, group: true, png: true },
+    heatmap:       { aggConfig: { measure: "sum" }, render: renderHeatmap, agg: true, png: true },
+    agg_table:     { aggConfig: { measure: "sum" }, render: renderAggTable, agg: true, group: true },
+    table:         { render: renderTable, rows: true, needsDataset: true },
+    form:          { render: renderForm, needsDataset: true },
   };
 
   function cfgMsg(attr, fallback) {
@@ -408,6 +731,11 @@
     var fn = RENDERERS[type];
     var ph = $("[data-widget-placeholder]", section);
     clearBody(body);
+    function showNoData() {
+      // distinct from "configure this widget" — the config is fine, there is
+      // just nothing to draw (todo §15.9 / §15.10)
+      if (ph) { ph.textContent = cfgMsg("data-no-data", "No data to display for this configuration."); }
+    }
     if (!fn) {
       if (ph) { ph.textContent = cfgMsg("data-no-renderer", "This widget type has no visual renderer yet."); }
       return;
@@ -421,13 +749,34 @@
       fetchAggregate(cfg)
         .then(function (data) {
           var ok = fn.render(body, data, cfg);
-          if (ok !== false && ph) { ph.remove(); }
+          if (ok === false) { showNoData(); return; }
+          if (ph) { ph.remove(); }
           if (fn.png) { addPngButton(section); }
         })
-        .catch(function () { /* brak danych — zostaje placeholder */ });
+        .catch(function () { showNoData(); });
+      return;
+    }
+    if (fn.rows) {
+      // raw data table — reads dataset rows instead of aggregating
+      if (!cfg.dataset_id) {
+        if (ph) { ph.textContent = cfgMsg("data-no-dataset", "Select a dataset to display data."); }
+        return;
+      }
+      fetchRows(cfg)
+        .then(function (data) {
+          var ok = fn.render(body, data, cfg);
+          if (ok === false) { showNoData(); return; }
+          if (ph) { ph.remove(); }
+        })
+        .catch(function () { showNoData(); });
+      return;
+    }
+    if (fn.needsDataset && !cfg.dataset_id) {
+      if (ph) { ph.textContent = cfgMsg("data-no-dataset", "Select a dataset to display data."); }
       return;
     }
     var done = fn.render(body, cfg);
+    if (done === false) { showNoData(); return; }
     if (done !== false && ph) { ph.remove(); }
   }
 

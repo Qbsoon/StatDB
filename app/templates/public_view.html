@@ -40,6 +40,15 @@
       {% endfor %}
     </div>
   </main>
+  <script id="datasets-json" type="application/json">{{ datasets_json | tojson }}</script>
+  <script>
+    // Expose dataset metadata for widget renderers (labels/options lookup)
+    try {
+      window.StatDBDatasets = JSON.parse(
+        document.getElementById("datasets-json").textContent
+      );
+    } catch (e) { window.StatDBDatasets = []; }
+  </script>
   <script src="{{ url_for('static', filename='js/gridstack.js') }}"></script>
   <script src="{{ url_for('static', filename='js/widget_renderers.js') }}"></script>
   <script src="{{ url_for('static', filename='js/public_view.js') }}"></script>

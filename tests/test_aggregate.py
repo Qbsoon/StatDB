@@ -146,6 +146,74 @@ async def test_group_select_order_labels(agg_db):
     assert result_pl["items"][0]["label"] == "Umowa"
 
 
+async def test_group_composite_two_columns(agg_db):
+    """§15.12: group_by accepts a list — month + source composite buckets,
+    ordered by the first column (temporal) then the second (select rank)."""
+    ds = await _seed(agg_db)
+    from app.aggregation import aggregate
+
+    result = await aggregate(agg_db, ds, {
+        "measure": "sum", "column": "amount",
+        "group_by": ["month", "source"],
+    })
+    assert result["kind"] == "grouped"
+    keys = [it["key"] for it in result["items"]]
+    assert keys == [
+        "01-2026 uop", "02-2026 uop", "03-2026 uop", "03-2026 b2b",
+        "04-2026 b2b", "05-2026 b2b",
+    ]
+    labels = [it["label"] for it in result["items"]]
+    assert "Contract" in labels[0]          # joined per-column labels
+    assert "B2B Invoice" in labels[3]
+    values = [it["value"] for it in result["items"]]
+    assert values == pytest.approx([9000.0, 9000.0, 6000.0, 8000.0, 12000.0, 4000.0])
+    # composite sort is per-column (list), not a single scalar
+    assert isinstance(result["items"][0]["sort"], list)
+
+    with pytest.raises(ValueError):
+        await aggregate(agg_db, ds, {
+            "measure": "sum", "column": "amount", "group_by": ["month", "nope"],
+        })
+
+
+async def test_group_month_select_over_year(agg_db):
+    """§15.12: month (select) grouped over year — composite buckets give a
+    chronological month+year timeline axis."""
+    from app.catalog.store import CatalogStore
+    from app.rows.store import RowStore
+
+    month_names = ["January", "February", "March", "April", "May", "June",
+                   "July", "August", "September", "October", "November", "December"]
+    store = CatalogStore(agg_db)
+    ds = await store.create_dataset("timeline", "Oś czasu")
+    await store.add_column(ds["id"], "year", "Rok", "year", {}, 1)
+    await store.add_column(ds["id"], "month", "Miesiąc", "select", {
+        "options": [
+            {"key": f"{m:02d}", "label": month_names[m - 1]}
+            for m in range(1, 13)
+        ]
+    }, 2)
+    await store.add_column(ds["id"], "amount", "Kwota", "integer", {}, 3)
+    ds = await store.get_dataset(dataset_id=ds["id"])
+    rs = RowStore(agg_db)
+    for year, month, amount in [(2025, "12", 100), (2026, "02", 150), (2026, "01", 200)]:
+        await rs.create_row(ds, {"year": year, "month": month, "amount": amount})
+    ds = await store.get_dataset(dataset_id=ds["id"])
+
+    from app.aggregation import aggregate
+    result = await aggregate(agg_db, ds, {
+        "measure": "sum", "column": "amount",
+        "group_by": ["year", "month"],
+    })
+    keys = [it["key"] for it in result["items"]]
+    # chronological: 2025-12 < 2026-01 < 2026-02 (select rank, not alphabet)
+    assert keys == ["2025 12", "2026 01", "2026 02"]
+    values = [it["value"] for it in result["items"]]
+    assert values == [100, 200, 150]
+    labels = [it["label"] for it in result["items"]]
+    assert "December" in labels[0] and "January" in labels[1] and "February" in labels[2]
+
+
 async def test_group_select_string_labels(agg_db):
     """Select options with plain-string labels resolve correctly (point 5)."""
     from app.catalog.store import CatalogStore

@@ -41,7 +41,8 @@ async def aggregate(db: Database, dataset: dict[str, Any], spec: dict[str, Any])
     Spec keys:
       measure   – aggregation: sum | avg | count | min | max | median (default sum)
       column    – measure column key (any numeric; default = count(*))
-      group_by  – column key to bucket by (optional scalar result when omitted)
+      group_by  – column key, or a LIST of keys (e.g. ["year", "month"]) for a
+                  composite bucket axis — timeline "month over year" (todo §15.12)
       series    – second key: each value becomes one output series
       filters   – see app.aggregation.filters
       lang      – "en" | "pl" (select label + month names)
@@ -53,7 +54,13 @@ async def aggregate(db: Database, dataset: dict[str, Any], spec: dict[str, Any])
         raise ValueError(f"bad measure '{measure}'")
 
     col_key = spec.get("column")
-    group_key = spec.get("group_by")
+    raw_group = spec.get("group_by")
+    if raw_group is None:
+        group_keys: list[str] = []
+    elif isinstance(raw_group, (list, tuple)):
+        group_keys = [str(k) for k in raw_group if k]
+    else:
+        group_keys = [str(raw_group)] if str(raw_group) else []
     series_key = spec.get("series")
     filters = spec.get("filters")
 
@@ -70,8 +77,9 @@ async def aggregate(db: Database, dataset: dict[str, Any], spec: dict[str, Any])
         raise ValueError(f"bad measure '{measure}'")
     if measure != "count" and col_key not in columns:
         raise ValueError(f"bad measure column '{col_key}'")
-    if group_key and group_key not in columns:
-        raise ValueError(f"bad group_by column '{group_key}'")
+    for gk in group_keys:
+        if gk not in columns:
+            raise ValueError(f"bad group_by column '{gk}'")
     if series_key and series_key not in columns:
         raise ValueError(f"bad series column '{series_key}'")
 
@@ -94,64 +102,83 @@ async def aggregate(db: Database, dataset: dict[str, Any], spec: dict[str, Any])
         measure_expr = f"{AGG_SQL[measure]}({col})"
 
     select_parts = [f"{measure_expr} AS value"]
-    groups: list[tuple[str, str, str]] = []  # (alias, display_expr, order_expr)
-    if group_key:
-        display, order = _physical_pairs(columns[group_key])
-        select_parts += [f"{display} AS bucket", f"{order} AS bucket_sort"]
-        groups.append(("bucket", display, order))
+    for i, gk in enumerate(group_keys):
+        display, order = _physical_pairs(columns[gk])
+        select_parts += [f"{display} AS g{i}", f"{order} AS g{i}_sort"]
     if series_key:
         display, order = _physical_pairs(columns[series_key])
         select_parts += [f"{display} AS series", f"{order} AS series_sort"]
-        groups.append(("series", display, order))
 
     sql = f'SELECT {", ".join(select_parts)} FROM "{table}"{where_sql}'
-    if groups:
-        sql += " GROUP BY " + ", ".join(g[0] for g in groups)
-        sql += " ORDER BY " + ", ".join(g[2] for g in groups)
+    group_terms = [f"g{i}" for i in range(len(group_keys))]
+    order_terms = [f"g{i}_sort" for i in range(len(group_keys))]
+    if series_key:
+        group_terms.append("series")
+        order_terms.append("series_sort")
+    if group_terms:
+        sql += " GROUP BY " + ", ".join(group_terms)
+        sql += " ORDER BY " + ", ".join(order_terms)
 
     rows = await db.query_all(sql, tuple(params))
 
-    group_col = columns.get(group_key) if group_key else None
+    group_cols = [columns[gk] for gk in group_keys]
+    group_ranks = [_rank_map(c) for c in group_cols]
     series_col = columns.get(series_key) if series_key else None
 
-    if not group_key:
+    if not group_keys:
         value = rows[0]["value"] if rows else None
         return {"kind": "scalar", "value": value, "measure": measure}
 
-    buckets: dict[Any, dict[str, Any]] = {}
+    def _bucket_key_repr(vals: tuple) -> Any:
+        return vals[0] if len(vals) == 1 else " ".join(str(v) for v in vals)
+
+    def _bucket_label(vals: tuple) -> str:
+        if len(vals) == 1:
+            return _bucket_label_single(vals[0], group_cols[0], lang)
+        return " ".join(
+            _bucket_label_single(v, c, lang) for v, c in zip(vals, group_cols)
+        )
+
+    buckets: dict[tuple, dict[str, Any]] = {}
     series_order: dict[Any, Any] = {}
     series_labels: dict[Any, str] = {}
     for r in rows:
-        bucket = r.get("bucket")
-        value = r.get("value")
-        series = r.get("series")
-        if bucket not in buckets:
-            buckets[bucket] = {
-                "key": bucket,
-                "sort": r.get("bucket_sort"),
-                "label": _bucket_label(bucket, group_col, lang),
+        vals = tuple(r.get(f"g{i}") for i in range(len(group_keys)))
+        sorts = tuple(r.get(f"g{i}_sort") for i in range(len(group_keys)))
+        if vals not in buckets:
+            buckets[vals] = {
+                "vals": vals,
+                "sorts": sorts,
+                "key": _bucket_key_repr(vals),
+                "label": _bucket_label(vals),
+                "sort": sorts[0] if len(sorts) == 1 else list(sorts),
                 "value": None,
                 "series": {},
             }
+        bucket = buckets[vals]
+        value = r.get("value")
+        series = r.get("series")
         if series_key:
             if series not in series_order:
                 series_order[series] = r.get("series_sort")
-                series_labels[series] = _bucket_label(series, series_col, lang)
-            buckets[bucket]["series"][series] = value
+                series_labels[series] = _bucket_label_single(series, series_col, lang)
+            bucket["series"][series] = value
         else:
-            buckets[bucket]["value"] = value
+            bucket["value"] = value
 
-    group_rank = _rank_map(group_col)
-    if group_rank is not None:
-        ordered_buckets = sorted(
-            buckets.values(),
-            key=lambda b: (group_rank.get(b["key"], len(group_rank)), str(b["key"])),
-        )
-    else:
-        ordered_buckets = sorted(
-            buckets.values(),
-            key=lambda b: (b["sort"] is None, b["sort"] if b["sort"] is not None else str(b["key"])),
-        )
+    def _bucket_order(b: dict[str, Any]) -> tuple:
+        sk: list[Any] = []
+        for i, col in enumerate(group_cols):
+            rank = group_ranks[i]
+            v = b["vals"][i]
+            if rank is not None:
+                sk.append((rank.get(v, len(rank)), str(v)))
+            else:
+                sv = b["sorts"][i]
+                sk.append((sv is None, sv if sv is not None else str(v)))
+        return tuple(sk)
+
+    ordered_buckets = sorted(buckets.values(), key=_bucket_order)
     series_rank = _rank_map(series_col)
     if series_rank is not None:
         series_list = sorted(
@@ -204,7 +231,7 @@ def _rank_map(col: dict[str, Any] | None) -> dict[Any, int] | None:
     return {opt.get("key"): idx for idx, opt in enumerate(options)}
 
 
-def _bucket_label(bucket: Any, col: dict[str, Any] | None, lang: str) -> str:
+def _bucket_label_single(bucket: Any, col: dict[str, Any] | None, lang: str) -> str:
     if col is None or bucket is None:
         return str(bucket)
     if col["type"] == "select":

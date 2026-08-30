@@ -11,6 +11,10 @@
       <li class="dataset-card">
         <a class="dataset-name" href="{{ url_for('web.view_detail', view_id=v.id) }}">{{ v.name }}</a>
         <span class="muted small">{{ t("views.widgets_count", count=v.widgets|length) }}</span>
+        <form method="post" action="{{ url_for('web.view_delete', view_id=v.id) }}" class="inline-form"
+              onsubmit="return confirm({{ t('views.confirm_delete_view', name=v.name) | tojson | e }});">
+          <button type="submit" class="danger small">{{ t("views.delete_view_btn") }}</button>
+        </form>
       </li>
     {% endfor %}
   </ul>
