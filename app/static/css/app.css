@@ -398,10 +398,44 @@ h3 { font-size: 16px; margin: 20px 0 8px; }
 .field-inline { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .check-label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 .cfg-opt-en, .cfg-opt-pl { width: 6rem; }
-.cfg-opt-color-wrap { display: inline-flex; align-items: center; gap: 2px; }
-.cfg-opt-color-wrap .cfg-opt-color { width: 2rem; height: 1.75rem; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; }
 .cfg-trans { display: none; }
 .cfg-block.show-trans .cfg-trans { display: inline-block; }
+
+/* todo §15.23: option color picker — swatch button + popup with "no color" */
+.cfg-color { position: relative; display: inline-flex; }
+.cfg-color-btn {
+  width: 2rem; height: 1.75rem; padding: 0; border: 1px solid var(--line);
+  border-radius: 4px; cursor: pointer; background: none;
+}
+.cfg-color-btn.is-none {
+  background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(128,128,128,.35) 4px 8px);
+}
+.cfg-color-pop {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 60;
+  background: var(--bg-soft, var(--bg)); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+  width: 176px; box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.cfg-color-pop .cfg-swatch {
+  width: 22px; height: 22px; padding: 0; border-radius: 4px;
+  border: 1px solid rgba(128,128,128,.4); cursor: pointer;
+}
+.cfg-color-pop .cfg-swatch[aria-pressed="true"] { outline: 2px solid var(--fg); }
+.cfg-color-pop .cfg-color-custom {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 6px;
+  font-size: 12px; margin-top: 4px; cursor: pointer;
+}
+.cfg-color-pop .cfg-color-custom input[type="color"] {
+  width: 2rem; height: 1.5rem; padding: 0; border: 1px solid var(--line);
+  border-radius: 4px; background: none; cursor: pointer;
+}
+.cfg-color-pop .cfg-color-none { grid-column: 1 / -1; font-size: 12px; margin-top: 2px; }
+
+/* todo §15.22: wide modals (column schema / add column) */
+.modal-wide { width: min(900px, 100%); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.dataset-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .cfg-options-toolbar { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
 .cfg-add-option { font-size: .85rem; }

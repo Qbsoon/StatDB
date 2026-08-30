@@ -6,10 +6,35 @@
 <h1>{{ dataset.name }} <span class="muted">({{ dataset.slug }})</span></h1>
 {% if dataset.description %}<p class="muted">{{ dataset.description }}</p>{% endif %}
 
-<p class="export-links">
+{# todo §15.22/§15.24/§15.25: less-common actions live behind modal buttons, like view widgets #}
+<p class="export-links dataset-toolbar">
   <a href="/datasets/{{ dataset.id }}/export?format=csv" class="btn">{{ t("transfer.export_csv") }}</a>
   <a href="/datasets/{{ dataset.id }}/export?format=json" class="btn">{{ t("transfer.export_json") }}</a>
+  <button type="button" data-modal-open="dataset-settings-modal">⚙ {{ t("dataset.settings_btn") }}</button>
+  <button type="button" data-modal-open="schema-modal">▤ {{ t("dataset.schema_btn") }}</button>
+  <button type="button" data-modal-open="column-add-modal">＋ {{ t("dataset.add_column") }}</button>
+  <button type="submit" form="ds-delete" class="danger"
+          onclick="return confirm({{ t('dataset.confirm_delete_dataset', name=dataset.name) | tojson }})">{{ t("dataset.delete_btn") }}</button>
 </p>
+
+{# §15.24: dataset label & description editor #}
+<div class="modal-overlay" id="dataset-settings-modal" hidden>
+  <div class="modal">
+    <h2>{{ t("dataset.settings_title") }}</h2>
+    <form method="post" action="{{ url_for('web.dataset_update', dataset_id=dataset.id, next=request.path) }}" class="widget-form">
+      <label class="field-inline">{{ t("dataset.name_label") }}
+        <input name="name" value="{{ dataset.name }}" required>
+      </label>
+      <label class="field-inline">{{ t("dataset.description") }}
+        <input name="description" value="{{ dataset.description or '' }}">
+      </label>
+      <div class="modal-actions">
+        <button type="submit">{{ t("dataset.save") }}</button>
+        <button type="button" data-modal-close>{{ t("datasets.cancel_btn") }}</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <h2>{{ t("records.title") }}</h2>
 
@@ -58,12 +83,15 @@
   <form id="row-new" method="post" action="{{ url_for('web.row_create', dataset_id=dataset.id, next=request.path) }}"></form>
 {% endif %}
 
-<h2>{{ t("dataset.schema") }}</h2>
+{# §15.22: column schema hidden behind a button #}
+<div class="modal-overlay" id="schema-modal" hidden>
+  <div class="modal modal-wide">
+    <h2>{{ t("dataset.schema") }}</h2>
 
-{% if not dataset.columns %}
-  <p class="muted">{{ t("dataset.no_columns") }}</p>
-{% else %}
-  <table class="table schema-table">
+    {% if not dataset.columns %}
+      <p class="muted">{{ t("dataset.no_columns") }}</p>
+    {% else %}
+      <table class="table schema-table">
     <thead>
       <tr>
         <th>{{ t("dataset.column_key") }}</th>
@@ -93,10 +121,18 @@
     <form id="col-{{ col.id }}" method="post" action="{{ url_for('web.column_update', column_id=col.id, next=request.path) }}"></form>
     <form id="del-{{ col.id }}" method="post" action="{{ url_for('web.column_delete', column_id=col.id, next=request.path) }}"></form>
   {% endfor %}
-{% endif %}
+    {% endif %}
+    <div class="modal-actions">
+      <button type="button" data-modal-close>{{ t("datasets.cancel_btn") }}</button>
+    </div>
+  </div>
+</div>
 
-<h3>{{ t("dataset.add_column") }}</h3>
-<form id="col-add" method="post" action="{{ url_for('web.column_add', dataset_id=dataset.id, next=request.path) }}" class="form-grid cols">
+{# §15.22: add-column hidden behind a button #}
+<div class="modal-overlay" id="column-add-modal" hidden>
+  <div class="modal modal-wide">
+    <h2>{{ t("dataset.add_column") }}</h2>
+    <form id="col-add" method="post" action="{{ url_for('web.column_add', dataset_id=dataset.id, next=request.path) }}" class="form-grid cols">
   <label>{{ t("dataset.column_key") }}
     <input name="key" required pattern="[a-z][a-z0-9_]*">
   </label>
@@ -118,8 +154,16 @@
       {% endfor %}
     </div>
   </div>
-  <button type="submit">{{ t("datasets.create_btn") }}</button>
+  <div class="modal-actions">
+    <button type="submit">{{ t("datasets.create_btn") }}</button>
+    <button type="button" data-modal-close>{{ t("datasets.cancel_btn") }}</button>
+  </div>
 </form>
+  </div>
+</div>
+
+{# §15.25: whole-dataset delete (button posts this hidden form) #}
+<form id="ds-delete" method="post" action="{{ url_for('web.dataset_delete', dataset_id=dataset.id) }}"></form>
 {% endblock %}
 
 {% block scripts %}

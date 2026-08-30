@@ -302,6 +302,33 @@ async def dataset_create():
     return redirect(f"/datasets/{ds['id']}")
 
 
+@bp.post("/datasets/<int:dataset_id>/update")
+async def dataset_update(dataset_id: int):
+    """Rename dataset / edit description — todo §15.24 + card-menu rename §15.25."""
+    store, form = await _form_catalog()
+    name = str(form.get("name", "")).strip()
+    try:
+        await store.update_dataset(
+            dataset_id,
+            name=name or None,
+            # absent field → keep current; present (even empty) → allow clearing
+            description=form.get("description") if "description" in form else None,
+        )
+    except KeyError:
+        abort(404)
+    return redirect(_safe_next(f"/datasets/{dataset_id}"))
+
+
+@bp.post("/datasets/<int:dataset_id>/delete")
+async def dataset_delete(dataset_id: int):
+    """Delete whole dataset (rows + columns + physical table) — todo §15.25."""
+    store, _ = await _form_catalog()
+    if not await store.get_dataset(dataset_id=dataset_id):
+        abort(404)
+    await store.delete_dataset(dataset_id)
+    return redirect("/datasets")
+
+
 @bp.post("/datasets/<int:dataset_id>/columns")
 async def column_add(dataset_id: int):
     store, form = await _form_catalog()

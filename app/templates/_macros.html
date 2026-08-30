@@ -39,10 +39,11 @@
   <input type="text" class="cfg-opt-label" form="{{ form_id }}" placeholder="{{ t('dataset.cfg_option_label') }}" value="{% if is_dict %}{{ lbl.get(lang) or lbl.get('en') or '' }}{% else %}{{ lbl or '' }}{% endif %}">
   <input type="text" class="cfg-opt-en cfg-trans" form="{{ form_id }}" placeholder="EN" value="{% if is_dict %}{{ lbl.get('en', '') }}{% endif %}">
   <input type="text" class="cfg-opt-pl cfg-trans" form="{{ form_id }}" placeholder="PL" value="{% if is_dict %}{{ lbl.get('pl', '') }}{% endif %}">
-  <label class="cfg-opt-color-wrap" title="{{ t('dataset.cfg_color') }}">
-    <input type="checkbox" class="cfg-opt-has-color"{% if opt.get("color") %} checked{% endif %}>
-    <input type="color" class="cfg-opt-color" form="{{ form_id }}" value="{{ opt.get('color', '#4f8cff') }}">
-  </label>
+  {# todo §15.23: no checkbox — swatch button opens a picker with a "no color" option #}
+  <span class="cfg-color" title="{{ t('dataset.cfg_color') }}">
+    <input type="hidden" class="cfg-opt-color" form="{{ form_id }}" value="{{ opt.get('color', '') }}">
+    <button type="button" class="cfg-color-btn{% if not opt.get('color') %} is-none{% endif %}" data-color-btn{% if opt.get('color') %} style="background: {{ opt.get('color') }}"{% endif %}></button>
+  </span>
   <button type="button" class="cfg-remove" data-remove-option title="{{ t('dataset.delete') }}">✕</button>
 </div>
 {%- endmacro %}
@@ -58,7 +59,7 @@
 {%- if ty == "select" -%}
 {%- set ns = namespace(had_dict=false) -%}
 {%- for opt in cfg.get("options", []) -%}{%- if opt.get("label") is mapping -%}{%- set ns.had_dict = true -%}{%- endif -%}{%- endfor -%}
-<div class="cfg-block" data-config-type="select" data-form="{{ form_id }}" data-next-key="{{ (cfg.get("options", []) | length) + 1 }}" data-label-ph="{{ t('dataset.cfg_option_label') }}" data-del-title="{{ t('dataset.delete') }}">
+<div class="cfg-block" data-config-type="select" data-form="{{ form_id }}" data-next-key="{{ (cfg.get("options", []) | length) + 1 }}" data-label-ph="{{ t('dataset.cfg_option_label') }}" data-del-title="{{ t('dataset.delete') }}" data-no-color="{{ t('dataset.no_color') }}" data-custom-color="{{ t('dataset.custom_color') }}">
   <div class="cfg-options" data-options-list>
     {%- for opt in cfg.get("options", []) %}
     {{ option_row(opt, form_id, lang) }}

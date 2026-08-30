@@ -80,7 +80,9 @@ class CatalogStore:
             raise KeyError(f"Dataset {dataset_id} not found")
         await self.db.execute(
             "UPDATE datasets SET name = ?, description = ? WHERE id = ?",
-            (name or current["name"], description or current["description"], dataset_id),
+            (current["name"] if name is None else name,
+             current["description"] if description is None else description,
+             dataset_id),
         )
         return (await self.get_dataset(dataset_id=dataset_id)) or {}
 

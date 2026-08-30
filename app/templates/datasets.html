@@ -15,6 +15,20 @@
         <span class="dataset-slug">{{ ds.slug }}</span>
         {% if ds.description %}<p class="muted">{{ ds.description }}</p>{% endif %}
         <span class="muted small">{{ t("datasets.columns_count", count=ds.columns|length) }}</span>
+        {# todo §15.25: destructive/less-common actions live behind a ⋯ menu, like views #}
+        <details class="card-menu">
+          <summary title="{{ t('views.menu') }}" aria-label="{{ t('views.menu') }}">⋯</summary>
+          <div class="card-menu-popup">
+            <form method="post" action="{{ url_for('web.dataset_update', dataset_id=ds.id, next=request.path) }}" class="inline-form">
+              <input name="name" value="{{ ds.name }}" required aria-label="{{ t('dataset.name_label') }}">
+              <button type="submit" class="small">{{ t("views.rename_btn") }}</button>
+            </form>
+            <form method="post" action="{{ url_for('web.dataset_delete', dataset_id=ds.id) }}" class="inline-form"
+                  onsubmit="return confirm({{ t('dataset.confirm_delete_dataset', name=ds.name) | tojson | e }});">
+              <button type="submit" class="danger small">{{ t("dataset.delete_btn") }}</button>
+            </form>
+          </div>
+        </details>
       </li>
     {% endfor %}
   </ul>

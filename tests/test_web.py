@@ -147,6 +147,102 @@ async def test_dataset_detail_select_options_gui(config, client):
     assert "Konfiguracja (JSON)" not in html
 
 
+# ---------- todo §15.22-§15.25: schema/add-column modals, settings, delete ----------
+
+
+async def test_dataset_detail_modals_hidden_behind_buttons(config, client):
+    """§15.22: schema & add-column sections live in modals opened by buttons."""
+    store, _ = await _store(config)
+    ds = await store.create_dataset("earnings", "Zarobki")
+    await store.add_column(ds["id"], key="amount", label="Kwota", type_key="float")
+
+    resp = await client.get(f"/datasets/{ds['id']}")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    for mid in ("dataset-settings-modal", "schema-modal", "column-add-modal"):
+        assert f'id="{mid}"' in html
+    assert 'data-modal-open="schema-modal"' in html
+    assert 'data-modal-open="column-add-modal"' in html
+    assert 'data-modal-open="dataset-settings-modal"' in html
+    # modals start hidden
+    assert f'id="schema-modal" hidden' in html
+
+
+async def test_select_option_color_picker_no_checkbox(config, client):
+    """§15.23: option color = swatch button (with no-color state), no checkbox."""
+    store, _ = await _store(config)
+    ds = await store.create_dataset("earnings", "Zarobki")
+    await store.add_column(ds["id"], key="source", label="Źródło", type_key="select", config={
+        "options": [
+            {"key": "uop", "label": "Umowa", "color": "#3b82f6"},
+            {"key": "b2b", "label": "B2B"},
+        ]
+    })
+    resp = await client.get(f"/datasets/{ds['id']}")
+    html = (await resp.get_data()).decode()
+    assert "cfg-opt-has-color" not in html  # §15.23: checkbox gone
+    assert 'class="cfg-color-btn is-none" data-color-btn' in html  # option without color
+    assert 'style="background: #3b82f6"' in html  # option with color
+    # block carries picker labels for JS
+    assert 'data-no-color="Brak koloru"' in html
+
+
+async def test_dataset_update_route(config, client):
+    """§15.24: dataset settings — label & description editable via POST."""
+    store, _ = await _store(config)
+    ds = await store.create_dataset("earnings", "Zarobki", "przychody")
+
+    resp = await client.post(f"/datasets/{ds['id']}/update", form={
+        "name": "Zarobki 2026", "description": "nowy opis",
+    })
+    assert resp.status_code in (301, 302)
+    ds2 = await store.get_dataset(dataset_id=ds["id"])
+    assert ds2["name"] == "Zarobki 2026"
+    assert ds2["description"] == "nowy opis"
+
+    # empty name keeps the current one; description can be cleared
+    resp = await client.post(f"/datasets/{ds['id']}/update", form={"name": "", "description": ""})
+    assert resp.status_code in (301, 302)
+    ds3 = await store.get_dataset(dataset_id=ds["id"])
+    assert ds3["name"] == "Zarobki 2026"
+    assert ds3["description"] == ""
+
+    # missing dataset → 404
+    resp = await client.post("/datasets/99999/update", form={"name": "x"})
+    assert resp.status_code == 404
+
+
+async def test_dataset_delete_route(config, client):
+    """§15.25: delete removes dataset (+ columns, + rows)."""
+    store, db = await _store(config)
+    ds = await store.create_dataset("earnings", "Zarobki")
+    await store.add_column(ds["id"], key="amount", label="Kwota", type_key="float")
+    # re-fetch so RowStore sees the column schema
+    ds = await store.get_dataset(dataset_id=ds["id"])
+    await RowStore(db).create_row(ds, {"amount": 5})
+
+    resp = await client.post(f"/datasets/{ds['id']}/delete")
+    assert resp.status_code in (301, 302)
+    assert (await store.get_dataset(dataset_id=ds["id"])) is None
+    # second delete → 404
+    resp = await client.post(f"/datasets/{ds['id']}/delete")
+    assert resp.status_code == 404
+
+
+async def test_datasets_list_card_menu(config, client):
+    """§15.25: datasets list has a ⋯ card-menu with rename + delete, like views."""
+    store, _ = await _store(config)
+    ds = await store.create_dataset("earnings", "Zarobki")
+
+    resp = await client.get("/datasets")
+    assert resp.status_code == 200
+    html = (await resp.get_data()).decode()
+    assert 'class="card-menu"' in html
+    assert f"/datasets/{ds['id']}/update" in html
+    assert f"/datasets/{ds['id']}/delete" in html
+    assert "Usuń tabelę" in html  # delete button label (PL default)
+
+
 async def test_select_string_label_in_records(config, client):
     """Records table renders string labels for select options (point 5)."""
     store, _ = await _store(config)

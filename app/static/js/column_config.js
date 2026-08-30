@@ -31,11 +31,8 @@
 
   function buildOption(row, translationsOn) {
     var opt = { key: row.getAttribute("data-key"), label: buildOptionLabel(row, translationsOn) };
-    var has = row.querySelector(".cfg-opt-has-color");
-    if (has && has.checked) {
-      var c = row.querySelector(".cfg-opt-color");
-      if (c && c.value) opt.color = c.value;
-    }
+    var c = row.querySelector(".cfg-opt-color");
+    if (c && c.value) opt.color = c.value;  // todo §15.23: color comes straight from the picker
     return opt;
   }
 
@@ -100,6 +97,21 @@
 
   /* ---------- option row management ---------- */
 
+  /* todo §15.23: color picker — swatch button + popup (palette / custom / "no color") */
+  var COLOR_PALETTE = [
+    "#4f8cff", "#2fbf71", "#e5484d", "#f5a524",
+    "#9b5de5", "#00b8d9", "#ef476f", "#06d6a0",
+    "#118ab2", "#ffd166", "#8d99ae", "#c1121f"
+  ];
+
+  function colorControl(formId, color) {
+    var c = String(color || "");
+    return '<span class="cfg-color">' +
+        '<input type="hidden" class="cfg-opt-color" form="' + formId + '" value="' + escAttr(c) + '">' +
+        '<button type="button" class="cfg-color-btn' + (c ? '" style="background:' + escAttr(c) : ' is-none') + '" data-color-btn></button>' +
+      '</span>';
+  }
+
   function nextKey(block) {
     var n = parseInt(block.getAttribute("data-next-key") || "1", 10);
     block.setAttribute("data-next-key", String(n + 1));
@@ -121,10 +133,7 @@
       '<input type="text" class="cfg-opt-label" form="' + formId + '" placeholder="' + labelPh + '">' +
       '<input type="text" class="cfg-opt-en cfg-trans" form="' + formId + '" placeholder="EN">' +
       '<input type="text" class="cfg-opt-pl cfg-trans" form="' + formId + '" placeholder="PL">' +
-      '<label class="cfg-opt-color-wrap">' +
-        '<input type="checkbox" class="cfg-opt-has-color">' +
-        '<input type="color" class="cfg-opt-color" form="' + formId + '" value="#4f8cff">' +
-      '</label>' +
+      colorControl(formId, "") +
       '<button type="button" class="cfg-remove" data-remove-option title="' + delTitle + '">\u00d7</button>';
     return div;
   }
@@ -183,6 +192,57 @@
     }
   }
 
+  /* ---------- color picker (todo §15.23) ---------- */
+
+  function closeColorPops() {
+    forEach(document.querySelectorAll(".cfg-color-pop"), function (p) { p.parentNode.removeChild(p); });
+  }
+
+  function setColor(row, color) {
+    if (!row) return;
+    var input = row.querySelector(".cfg-opt-color");
+    var btn = row.querySelector(".cfg-color-btn");
+    if (input) input.value = color || "";
+    if (btn) {
+      if (color) { btn.style.background = color; btn.classList.remove("is-none"); }
+      else { btn.style.background = ""; btn.classList.add("is-none"); }
+    }
+    syncForm(blockFormId(row.closest(".cfg-block")));
+  }
+
+  function openColorPop(btn) {
+    closeColorPops();
+    var row = btn.closest(".cfg-option-row");
+    var block = btn.closest(".cfg-block");
+    if (!row || !block) return;
+    var input = row.querySelector(".cfg-opt-color");
+    var current = ((input && input.value) || "").toLowerCase();
+    var div = document.createElement("div");
+    div.className = "cfg-color-pop";
+    div.setAttribute("data-color-pop", "");
+    var swatches = COLOR_PALETTE.map(function (c) {
+      return '<button type="button" class="cfg-swatch" data-swatch="' + c + '" style="background:' + c + '"' +
+             (c.toLowerCase() === current ? ' aria-pressed="true"' : '') + '></button>';
+    }).join("");
+    div.innerHTML = swatches +
+      '<label class="cfg-color-custom">' + escAttr(block.getAttribute("data-custom-color") || "Custom…") +
+        ' <input type="color" data-color-custom value="' + (current || COLOR_PALETTE[0]) + '"></label>' +
+      '<button type="button" class="cfg-color-none" data-color-none>' +
+        escAttr(block.getAttribute("data-no-color") || "No color") + '</button>';
+    btn.parentNode.appendChild(div);
+  }
+
+  /* ---------- modals (todo §15.22/§15.24) ---------- */
+
+  function openModal(ov) { ov.hidden = false; }
+  function closeModal(ov) { ov.hidden = true; }
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") return;
+    closeColorPops();
+    forEach(document.querySelectorAll(".modal-overlay:not([hidden])"), closeModal);
+  });
+
   /* ---------- event wiring ---------- */
 
   function initBlock(block) {
@@ -205,11 +265,46 @@
       if (block) { updateTranslationsVisibility(block); syncForm(blockFormId(block)); }
       return;
     }
+    var custom = ev.target.closest("[data-color-custom]");
+    if (custom) {
+      setColor(custom.closest(".cfg-option-row"), custom.value);
+      return;
+    }
     var block = ev.target.closest(".cfg-block");
     if (block) syncForm(blockFormId(block));
   });
 
   document.addEventListener("click", function (ev) {
+    /* modals */
+    var mo = ev.target.closest("[data-modal-open]");
+    if (mo) {
+      var ov = document.getElementById(mo.getAttribute("data-modal-open"));
+      if (ov) openModal(ov);
+      return;
+    }
+    var mc = ev.target.closest("[data-modal-close]");
+    if (mc) {
+      var ovC = mc.closest(".modal-overlay");
+      if (ovC) closeModal(ovC);
+      return;
+    }
+    if (ev.target.classList && ev.target.classList.contains("modal-overlay")) {
+      closeModal(ev.target);
+      return;
+    }
+    /* color picker */
+    var cb = ev.target.closest("[data-color-btn]");
+    if (cb) {
+      if (cb.parentNode.querySelector("[data-color-pop]")) closeColorPops();
+      else openColorPop(cb);
+      return;
+    }
+    var sw = ev.target.closest("[data-swatch]");
+    if (sw) { setColor(sw.closest(".cfg-option-row"), sw.getAttribute("data-swatch")); closeColorPops(); return; }
+    var cn = ev.target.closest("[data-color-none]");
+    if (cn) { setColor(cn.closest(".cfg-option-row"), ""); closeColorPops(); return; }
+    if (!ev.target.closest(".cfg-color")) closeColorPops();
+
     var add = ev.target.closest("[data-add-option]");
     if (add) {
       var block = add.closest(".cfg-block");
