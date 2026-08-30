@@ -1,0 +1,649 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.7, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/qbsoon/repos/StatDB
+configfile: pyproject.toml
+testpaths: tests
+plugins: asyncio-0.26.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 132 items
+
+tests/test_aggregate.py .............                                    [  9%]
+tests/test_auth.py .......                                               [ 15%]
+tests/test_catalog.py ...........                                        [ 23%]
+tests/test_config.py .....                                               [ 27%]
+tests/test_db.py ......                                                  [ 31%]
+tests/test_e2e.py .F...                                                  [ 35%]
+tests/test_healthz.py ...                                                [ 37%]
+tests/test_kiosk.py ..F..F..F                                            [ 44%]
+tests/test_rows.py .....................                                 [ 60%]
+tests/test_smoke.py .....                                                [ 64%]
+tests/test_transfer.py .................                                 [ 77%]
+tests/test_views.py .........                                            [ 84%]
+tests/test_web.py ...........F..FFFF...                                  [100%]
+
+=================================== FAILURES ===================================
+___________________________ test_e2e_view_dashboard ____________________________
+
+client = <quart.testing.client.QuartClient object at 0x7f427d3433e0>
+config = <app.config.Config object at 0x7f427d15fbb0>
+
+    async def test_e2e_view_dashboard(client, config):
+        """Create dataset, rows, view with 3 widgets, verify dashboard page."""
+        # Seed data via stores (faster than API for setup)
+        db = Database(config.db_path)
+        cstore = CatalogStore(db)
+        rstore = RowStore(db)
+    
+        ds = await cstore.create_dataset("sales", "Sales")
+        await cstore.add_column(ds["id"], "month", "Month", "year-month", {"input_format": "MM-YYYY"}, 1)
+        await cstore.add_column(ds["id"], "region", "Region", "select", {
+            "options": [
+                {"key": "eu", "label": {"en": "Europe", "pl": "Europa"}, "color": "#3b82f6"},
+                {"key": "us", "label": {"en": "USA", "pl": "USA"}, "color": "#f59e0b"},
+            ]
+        }, 2)
+        await cstore.add_column(ds["id"], "revenue", "Revenue", "currency", {"currency_code": "EUR"}, 3)
+    
+        ds = await cstore.get_dataset(dataset_id=ds["id"])
+        for month, region, rev in [
+            ("01-2026", "eu", 5000), ("01-2026", "us", 3000),
+            ("02-2026", "eu", 7000), ("02-2026", "us", 2000),
+            ("03-2026", "eu", 6000), ("03-2026", "us", 8000),
+        ]:
+            await rstore.create_row(ds, {"month": month, "region": region, "revenue": rev})
+    
+        # Create view via API
+        resp = await client.post("/api/views", json={"name": "Sales Dashboard"})
+        assert resp.status_code == 201
+        view = await resp.get_json()
+        view_id = view["id"]
+    
+        # Add 3 widgets: KPI sum, bar chart, stacked bar
+        for wtype, title, cfg in [
+            ("kpi_sum", "Total Revenue", {"dataset_id": ds["id"], "column": "revenue"}),
+            ("bar", "Revenue by Region", {"dataset_id": ds["id"], "column": "revenue", "group_by": "region"}),
+            ("stacked_bar", "Revenue by Month/Region", {
+                "dataset_id": ds["id"], "column": "revenue",
+                "group_by": "month", "series": "region",
+            }),
+        ]:
+            resp = await client.post(f"/api/views/{view_id}/widgets", json={
+                "type": wtype, "title": title, "config": cfg,
+            })
+            assert resp.status_code == 201
+    
+        # Get view with widgets
+        resp = await client.get(f"/api/views/{view_id}")
+        assert resp.status_code == 200
+        view_full = await resp.get_json()
+        assert len(view_full["widgets"]) == 3
+        assert view_full["widgets"][0]["type"] == "kpi_sum"
+        assert view_full["widgets"][1]["type"] == "bar"
+        assert view_full["widgets"][2]["type"] == "stacked_bar"
+    
+        # Dashboard page renders
+        resp = await client.get(f"/views/{view_id}")
+>       assert resp.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 INTERNAL SERVER ERROR]>.status_code
+
+tests/test_e2e.py:145: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app:app.py:1145 Exception on request GET /views/1
+Traceback (most recent call last):
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1464, in handle_request
+    return await self.full_dispatch_request(request_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1502, in full_dispatch_request
+    result = await self.handle_user_exception(error)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1059, in handle_user_exception
+    raise error
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1500, in full_dispatch_request
+    result = await self.dispatch_request(request_context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1597, in dispatch_request
+    return await self.ensure_async(handler)(**request_.view_args)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/app/web/__init__.py", line 86, in view_detail
+    return await render_template(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/templating.py", line 57, in render_template
+    template = current_app.jinja_env.get_or_select_template(template_name_or_list)  # type: ignore
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1087, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1016, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 975, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/loaders.py", line 138, in load
+    code = environment.compile(source, name, filename)
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 771, in compile
+    self.handle_exception(source=source_hint)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/home/qbsoon/repos/StatDB/app/templates/view_detail.html", line 160, in template
+    <script id="datasets-json" type="application/json">{{ [{"id": ds.id, "columns": [{"key": c.key, "label": c.label or c.key, "type": c.type} for c in ds.columns]} for ds in datasets] | tojson }}</script>
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateSyntaxError: expected token ',', got 'for'
+_____________________ test_custom_css_injected_view_detail _____________________
+
+config = <app.config.Config object at 0x7f427d116a30>
+client = <quart.testing.client.QuartClient object at 0x7f427e511db0>
+
+    async def test_custom_css_injected_view_detail(config, client):
+        db = Database(config.db_path)
+        store = ViewStore(db)
+        view = await store.create_view("Sales", settings={"custom_css": "h1 { color: hotpink; }"})
+    
+        resp = await client.get(f"/views/{view['id']}")
+        html = (await resp.get_data()).decode()
+>       assert resp.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 INTERNAL SERVER ERROR]>.status_code
+
+tests/test_kiosk.py:51: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app:app.py:1145 Exception on request GET /views/1
+Traceback (most recent call last):
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1464, in handle_request
+    return await self.full_dispatch_request(request_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1502, in full_dispatch_request
+    result = await self.handle_user_exception(error)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1059, in handle_user_exception
+    raise error
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1500, in full_dispatch_request
+    result = await self.dispatch_request(request_context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1597, in dispatch_request
+    return await self.ensure_async(handler)(**request_.view_args)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/app/web/__init__.py", line 86, in view_detail
+    return await render_template(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/templating.py", line 57, in render_template
+    template = current_app.jinja_env.get_or_select_template(template_name_or_list)  # type: ignore
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1087, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1016, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 975, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/loaders.py", line 138, in load
+    code = environment.compile(source, name, filename)
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 771, in compile
+    self.handle_exception(source=source_hint)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/home/qbsoon/repos/StatDB/app/templates/view_detail.html", line 160, in template
+    <script id="datasets-json" type="application/json">{{ [{"id": ds.id, "columns": [{"key": c.key, "label": c.label or c.key, "type": c.type} for c in ds.columns]} for ds in datasets] | tojson }}</script>
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateSyntaxError: expected token ',', got 'for'
+__________________________ test_kiosk_button_present ___________________________
+
+config = <app.config.Config object at 0x7f427d1151d0>
+client = <quart.testing.client.QuartClient object at 0x7f427d3b6950>
+
+    async def test_kiosk_button_present(config, client):
+        db = Database(config.db_path)
+        store = ViewStore(db)
+        view = await store.create_view("Kiosk Test")
+    
+        resp = await client.get(f"/views/{view['id']}")
+        html = (await resp.get_data()).decode()
+>       assert resp.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 INTERNAL SERVER ERROR]>.status_code
+
+tests/test_kiosk.py:86: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app:app.py:1145 Exception on request GET /views/1
+Traceback (most recent call last):
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1464, in handle_request
+    return await self.full_dispatch_request(request_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1502, in full_dispatch_request
+    result = await self.handle_user_exception(error)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1059, in handle_user_exception
+    raise error
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1500, in full_dispatch_request
+    result = await self.dispatch_request(request_context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1597, in dispatch_request
+    return await self.ensure_async(handler)(**request_.view_args)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/app/web/__init__.py", line 86, in view_detail
+    return await render_template(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/templating.py", line 57, in render_template
+    template = current_app.jinja_env.get_or_select_template(template_name_or_list)  # type: ignore
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1087, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1016, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 975, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/loaders.py", line 138, in load
+    code = environment.compile(source, name, filename)
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 771, in compile
+    self.handle_exception(source=source_hint)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/home/qbsoon/repos/StatDB/app/templates/view_detail.html", line 160, in template
+    <script id="datasets-json" type="application/json">{{ [{"id": ds.id, "columns": [{"key": c.key, "label": c.label or c.key, "type": c.type} for c in ds.columns]} for ds in datasets] | tojson }}</script>
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateSyntaxError: expected token ',', got 'for'
+________________________ test_settings_form_has_fields _________________________
+
+config = <app.config.Config object at 0x7f427d040730>
+client = <quart.testing.client.QuartClient object at 0x7f427d36aac0>
+
+    async def test_settings_form_has_fields(config, client):
+        db = Database(config.db_path)
+        store = ViewStore(db)
+        view = await store.create_view("Settings Form")
+    
+        resp = await client.get(f"/views/{view['id']}")
+        html = (await resp.get_data()).decode()
+>       assert resp.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 INTERNAL SERVER ERROR]>.status_code
+
+tests/test_kiosk.py:118: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app:app.py:1145 Exception on request GET /views/1
+Traceback (most recent call last):
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1464, in handle_request
+    return await self.full_dispatch_request(request_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1502, in full_dispatch_request
+    result = await self.handle_user_exception(error)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1059, in handle_user_exception
+    raise error
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1500, in full_dispatch_request
+    result = await self.dispatch_request(request_context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1597, in dispatch_request
+    return await self.ensure_async(handler)(**request_.view_args)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/app/web/__init__.py", line 86, in view_detail
+    return await render_template(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/templating.py", line 57, in render_template
+    template = current_app.jinja_env.get_or_select_template(template_name_or_list)  # type: ignore
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1087, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1016, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 975, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/loaders.py", line 138, in load
+    code = environment.compile(source, name, filename)
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 771, in compile
+    self.handle_exception(source=source_hint)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/home/qbsoon/repos/StatDB/app/templates/view_detail.html", line 160, in template
+    <script id="datasets-json" type="application/json">{{ [{"id": ds.id, "columns": [{"key": c.key, "label": c.label or c.key, "type": c.type} for c in ds.columns]} for ds in datasets] | tojson }}</script>
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateSyntaxError: expected token ',', got 'for'
+_______________________________ test_views_pages _______________________________
+
+config = <app.config.Config object at 0x7f427c58a530>
+client = <quart.testing.client.QuartClient object at 0x7f427c436820>
+
+    async def test_views_pages(config, client):
+        # list
+        resp = await client.get("/views")
+        assert resp.status_code == 200
+    
+        # create
+        resp = await client.post("/views", form={"name": "Finanse"})
+        assert resp.status_code in (301, 302)
+        location = resp.headers["Location"]
+        assert location.startswith("/views/")
+        view_id = int(location.rsplit("/", 1)[1])
+    
+        # detail 200, grid kontener + add-widget form
+        resp = await client.get(f"/views/{view_id}")
+>       assert resp.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 INTERNAL SERVER ERROR]>.status_code
+
+tests/test_web.py:256: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app:app.py:1145 Exception on request GET /views/1
+Traceback (most recent call last):
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1464, in handle_request
+    return await self.full_dispatch_request(request_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1502, in full_dispatch_request
+    result = await self.handle_user_exception(error)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1059, in handle_user_exception
+    raise error
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1500, in full_dispatch_request
+    result = await self.dispatch_request(request_context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1597, in dispatch_request
+    return await self.ensure_async(handler)(**request_.view_args)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/app/web/__init__.py", line 86, in view_detail
+    return await render_template(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/templating.py", line 57, in render_template
+    template = current_app.jinja_env.get_or_select_template(template_name_or_list)  # type: ignore
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1087, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1016, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 975, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/loaders.py", line 138, in load
+    code = environment.compile(source, name, filename)
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 771, in compile
+    self.handle_exception(source=source_hint)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/home/qbsoon/repos/StatDB/app/templates/view_detail.html", line 160, in template
+    <script id="datasets-json" type="application/json">{{ [{"id": ds.id, "columns": [{"key": c.key, "label": c.label or c.key, "type": c.type} for c in ds.columns]} for ds in datasets] | tojson }}</script>
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateSyntaxError: expected token ',', got 'for'
+_________________________ test_widget_renderer_markup __________________________
+
+config = <app.config.Config object at 0x7f427d0b9590>
+client = <quart.testing.client.QuartClient object at 0x7f427cfefe00>
+
+    async def test_widget_renderer_markup(config, client):
+        """Widgets render data-widget-type/config/body attrs + script tag."""
+        db = Database(config.db_path)
+        vstore = ViewStore(db)
+        view = await vstore.create_view("Render")
+        await vstore.add_widget(view["id"], "note", title="N1", config={"text": "hello world"})
+        ds = await _seed_dataset(config)
+        await vstore.add_widget(view["id"], "kpi_sum", title="Suma",
+                                config={"dataset_id": ds["id"], "column": "amount"})
+        await vstore.add_widget(view["id"], "bar", title="Bar",
+                                config={"dataset_id": ds["id"], "column": "amount",
+                                        "group_by": "month"})
+    
+        resp = await client.get(f"/views/{view['id']}")
+>       assert resp.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 INTERNAL SERVER ERROR]>.status_code
+
+tests/test_web.py:367: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app:app.py:1145 Exception on request GET /views/1
+Traceback (most recent call last):
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1464, in handle_request
+    return await self.full_dispatch_request(request_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1502, in full_dispatch_request
+    result = await self.handle_user_exception(error)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1059, in handle_user_exception
+    raise error
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1500, in full_dispatch_request
+    result = await self.dispatch_request(request_context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1597, in dispatch_request
+    return await self.ensure_async(handler)(**request_.view_args)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/app/web/__init__.py", line 86, in view_detail
+    return await render_template(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/templating.py", line 57, in render_template
+    template = current_app.jinja_env.get_or_select_template(template_name_or_list)  # type: ignore
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1087, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1016, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 975, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/loaders.py", line 138, in load
+    code = environment.compile(source, name, filename)
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 771, in compile
+    self.handle_exception(source=source_hint)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/home/qbsoon/repos/StatDB/app/templates/view_detail.html", line 160, in template
+    <script id="datasets-json" type="application/json">{{ [{"id": ds.id, "columns": [{"key": c.key, "label": c.label or c.key, "type": c.type} for c in ds.columns]} for ds in datasets] | tojson }}</script>
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateSyntaxError: expected token ',', got 'for'
+_________________________ test_widget_note_config_text _________________________
+
+config = <app.config.Config object at 0x7f427c589270>
+client = <quart.testing.client.QuartClient object at 0x7f427cfee970>
+
+    async def test_widget_note_config_text(config, client):
+        """Note widget config text is in the JSON blob on the page."""
+        db = Database(config.db_path)
+        vstore = ViewStore(db)
+        view = await vstore.create_view("Note")
+        await vstore.add_widget(view["id"], "note", title="N", config={"text": "test note 123"})
+        resp = await client.get(f"/views/{view['id']}")
+>       assert resp.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 INTERNAL SERVER ERROR]>.status_code
+
+tests/test_web.py:387: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app:app.py:1145 Exception on request GET /views/1
+Traceback (most recent call last):
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1464, in handle_request
+    return await self.full_dispatch_request(request_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1502, in full_dispatch_request
+    result = await self.handle_user_exception(error)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1059, in handle_user_exception
+    raise error
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1500, in full_dispatch_request
+    result = await self.dispatch_request(request_context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1597, in dispatch_request
+    return await self.ensure_async(handler)(**request_.view_args)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/app/web/__init__.py", line 86, in view_detail
+    return await render_template(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/templating.py", line 57, in render_template
+    template = current_app.jinja_env.get_or_select_template(template_name_or_list)  # type: ignore
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1087, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1016, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 975, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/loaders.py", line 138, in load
+    code = environment.compile(source, name, filename)
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 771, in compile
+    self.handle_exception(source=source_hint)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/home/qbsoon/repos/StatDB/app/templates/view_detail.html", line 160, in template
+    <script id="datasets-json" type="application/json">{{ [{"id": ds.id, "columns": [{"key": c.key, "label": c.label or c.key, "type": c.type} for c in ds.columns]} for ds in datasets] | tojson }}</script>
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateSyntaxError: expected token ',', got 'for'
+_________________________ test_widget_kpi_with_dataset _________________________
+
+config = <app.config.Config object at 0x7f427c589e50>
+client = <quart.testing.client.QuartClient object at 0x7f427e435630>
+
+    async def test_widget_kpi_with_dataset(config, client):
+        """KPI widget with dataset_id triggers aggregate on page load (config in DOM)."""
+        ds = await _seed_dataset(config)
+        db = Database(config.db_path)
+        vstore = ViewStore(db)
+        view = await vstore.create_view("KPI")
+        await vstore.add_widget(view["id"], "kpi_sum", title="Suma",
+                                config={"dataset_id": ds["id"], "column": "amount"})
+        resp = await client.get(f"/views/{view['id']}")
+>       assert resp.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 INTERNAL SERVER ERROR]>.status_code
+
+tests/test_web.py:401: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app:app.py:1145 Exception on request GET /views/1
+Traceback (most recent call last):
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1464, in handle_request
+    return await self.full_dispatch_request(request_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1502, in full_dispatch_request
+    result = await self.handle_user_exception(error)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1059, in handle_user_exception
+    raise error
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1500, in full_dispatch_request
+    result = await self.dispatch_request(request_context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1597, in dispatch_request
+    return await self.ensure_async(handler)(**request_.view_args)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/app/web/__init__.py", line 86, in view_detail
+    return await render_template(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/templating.py", line 57, in render_template
+    template = current_app.jinja_env.get_or_select_template(template_name_or_list)  # type: ignore
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1087, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1016, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 975, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/loaders.py", line 138, in load
+    code = environment.compile(source, name, filename)
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 771, in compile
+    self.handle_exception(source=source_hint)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/home/qbsoon/repos/StatDB/app/templates/view_detail.html", line 160, in template
+    <script id="datasets-json" type="application/json">{{ [{"id": ds.id, "columns": [{"key": c.key, "label": c.label or c.key, "type": c.type} for c in ds.columns]} for ds in datasets] | tojson }}</script>
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateSyntaxError: expected token ',', got 'for'
+______________________ test_widget_placeholder_no_dataset ______________________
+
+config = <app.config.Config object at 0x7f427d0b94f0>
+client = <quart.testing.client.QuartClient object at 0x7f427d216040>
+
+    async def test_widget_placeholder_no_dataset(config, client):
+        """Agg widget without dataset_id keeps placeholder (no crash)."""
+        db = Database(config.db_path)
+        vstore = ViewStore(db)
+        view = await vstore.create_view("Empty")
+        await vstore.add_widget(view["id"], "bar", title="No data", config={})
+        resp = await client.get(f"/views/{view['id']}")
+>       assert resp.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <Response [500 INTERNAL SERVER ERROR]>.status_code
+
+tests/test_web.py:415: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app:app.py:1145 Exception on request GET /views/1
+Traceback (most recent call last):
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1464, in handle_request
+    return await self.full_dispatch_request(request_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1502, in full_dispatch_request
+    result = await self.handle_user_exception(error)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1059, in handle_user_exception
+    raise error
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1500, in full_dispatch_request
+    result = await self.dispatch_request(request_context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/app.py", line 1597, in dispatch_request
+    return await self.ensure_async(handler)(**request_.view_args)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/app/web/__init__.py", line 86, in view_detail
+    return await render_template(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/quart/templating.py", line 57, in render_template
+    template = current_app.jinja_env.get_or_select_template(template_name_or_list)  # type: ignore
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1087, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 1016, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 975, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/loaders.py", line 138, in load
+    code = environment.compile(source, name, filename)
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 771, in compile
+    self.handle_exception(source=source_hint)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/qbsoon/repos/StatDB/.venv/lib64/python3.14/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/home/qbsoon/repos/StatDB/app/templates/view_detail.html", line 160, in template
+    <script id="datasets-json" type="application/json">{{ [{"id": ds.id, "columns": [{"key": c.key, "label": c.label or c.key, "type": c.type} for c in ds.columns]} for ds in datasets] | tojson }}</script>
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateSyntaxError: expected token ',', got 'for'
+=========================== short test summary info ============================
+FAILED tests/test_e2e.py::test_e2e_view_dashboard - assert 500 == 200
+FAILED tests/test_kiosk.py::test_custom_css_injected_view_detail - assert 500...
+FAILED tests/test_kiosk.py::test_kiosk_button_present - assert 500 == 200
+FAILED tests/test_kiosk.py::test_settings_form_has_fields - assert 500 == 200
+FAILED tests/test_web.py::test_views_pages - assert 500 == 200
+FAILED tests/test_web.py::test_widget_renderer_markup - assert 500 == 200
+FAILED tests/test_web.py::test_widget_note_config_text - assert 500 == 200
+FAILED tests/test_web.py::test_widget_kpi_with_dataset - assert 500 == 200
+FAILED tests/test_web.py::test_widget_placeholder_no_dataset - assert 500 == 200
+======================== 9 failed, 123 passed in 2.26s =========================

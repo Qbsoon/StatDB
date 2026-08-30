@@ -5,26 +5,34 @@
 {% if view.settings and view.settings.custom_css %}
 <style id="view-custom-css">{{ view.settings.custom_css | safe }}</style>
 {% endif %}
+<style>
+  /* Dashboard grid spans the full viewport width (issue #7) */
+  main.content { width: 100%; max-width: 100%; }
+</style>
 {% endblock %}
 {% block content %}
-<p><a href="{{ url_for('web.views') }}">{{ t("views.back") }}</a> · <button type="button" id="kiosk-toggle" class="btn-link">{{ t("views.kiosk_btn") }}</button></p>
-<h1>{{ view.name }}</h1>
-{% if g.statdb_has_password %}
-<p class="public-link-row">
-  <a href="/public/views/{{ view.id }}" target="_blank">{{ t("auth.public_link") }}</a>
-</p>
-{% endif %}
+<div class="narrow">
+  <p><a href="{{ url_for('web.views') }}">{{ t("views.back") }}</a> · <button type="button" id="kiosk-toggle" class="btn-link">{{ t("views.kiosk_btn") }}</button></p>
+  <h1>{{ view.name }}</h1>
+  {% if g.statdb_has_password %}
+  <p class="public-link-row">
+    <a href="/public/views/{{ view.id }}" target="_blank">{{ t("auth.public_link") }}</a>
+  </p>
+  {% endif %}
 
-<div id="view-config"
-     data-view-id="{{ view.id }}"
-     data-confirm-delete="{{ t('views.widget_confirm_delete') | tojson }}"
-     data-layout-url="{{ url_for('web.views_layout_save', view_id=view.id) }}"
-     data-settings='{{ (view.settings or {}) | tojson }}'
-     data-kiosk-exit="{{ t('views.kiosk_exit') }}"></div>
+  <div id="view-config"
+       data-view-id="{{ view.id }}"
+       data-confirm-delete="{{ t('views.widget_confirm_delete') | tojson }}"
+       data-layout-url="{{ url_for('web.views_layout_save', view_id=view.id) }}"
+       data-settings='{{ (view.settings or {}) | tojson }}'
+       data-kiosk-exit="{{ t('views.kiosk_exit') }}"
+       data-no-dataset="{{ t('views.widget_no_dataset') }}"
+       data-no-renderer="{{ t('views.widget_no_renderer') }}"></div>
 
-{% if not view.widgets %}
-  <p class="muted">{{ t("views.no_widgets") }}</p>
-{% endif %}
+  {% if not view.widgets %}
+    <p class="muted">{{ t("views.no_widgets") }}</p>
+  {% endif %}
+</div>
 
 <div class="grid-stack" id="grid">
   {% for w in view.widgets %}
@@ -47,72 +55,109 @@
   {% endfor %}
 </div>
 
-<h2>{{ t("views.add_widget") }}</h2>
-<form id="widget-create-form" method="post" action="{{ url_for('web.widget_create', view_id=view.id, next=request.path) }}" class="form-grid cols">
-  <label>
-    {{ t("views.add_widget_type") }}
-    <select name="type">
-      {% for wtype in widget_types %}
-        <option value="{{ wtype }}">{{ wtype }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>
-    {{ t("views.add_widget_title") }}
-    <input name="title">
-  </label>
-  <label>
-    {{ t("views.add_widget_dataset") }}
-    <select name="dataset_id">
-      <option value=""></option>
-      {% for ds in datasets %}
-        <option value="{{ ds.id }}">{{ ds.name }} ({{ ds.slug }})</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>
-    {{ t("views.add_widget_column") }}
-    <input name="column">
-  </label>
-  <button type="submit">{{ t("records.add_btn") }}</button>
-</form>
+<div class="narrow">
+  <h2>{{ t("views.add_widget") }}</h2>
+  <form id="widget-create-form" method="post" action="{{ url_for('web.widget_create', view_id=view.id, next=request.path) }}" class="widget-form">
+    <label>{{ t("views.add_widget_type") }}
+      <select name="type" id="wc-type">
+        {% for wtype in widget_types %}<option value="{{ wtype }}">{{ wtype }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>{{ t("views.add_widget_title") }}
+      <input name="title" id="wc-title">
+    </label>
+    <label data-field="dataset">{{ t("views.add_widget_dataset") }}
+      <select name="dataset_id" id="wc-dataset">
+        <option value=""></option>
+        {% for ds in datasets %}<option value="{{ ds.id }}">{{ ds.name }} ({{ ds.slug }})</option>{% endfor %}
+      </select>
+    </label>
+    <label data-field="column">{{ t("views.widget_value_column") }}
+      <select name="column" id="wc-column"><option value=""></option></select>
+    </label>
+    <label data-field="measure">{{ t("views.widget_measure") }}
+      <select name="measure" id="wc-measure">
+        <option value="sum">sum</option>
+        <option value="avg">avg</option>
+        <option value="count">count</option>
+        <option value="min">min</option>
+        <option value="max">max</option>
+        <option value="median">median</option>
+      </select>
+    </label>
+    <label data-field="group_by">{{ t("views.widget_group_by") }}
+      <select name="group_by" id="wc-groupby"><option value=""></option></select>
+    </label>
+    <label data-field="series">{{ t("views.widget_series") }}
+      <select name="series" id="wc-series"><option value=""></option></select>
+    </label>
+    <label data-field="text">{{ t("views.widget_note_text") }}
+      <textarea name="text" id="wc-text" rows="2"></textarea>
+    </label>
+    <input type="hidden" name="config" id="wc-config" value="">
+    <button type="submit">{{ t("records.add_btn") }}</button>
+  </form>
 
-<div id="widget-edit-section" hidden>
-  <h2>{{ t("views.edit_widget") }}</h2>
-  <form id="widget-edit-form" method="post" action="{{ url_for('web.widget_update', view_id=view.id, widget_id=0, next=request.path) }}" class="form-grid cols">
-    <label>
-      {{ t("views.add_widget_title") }}
-      <input name="title" id="widget-edit-title">
-    </label>
-    <label>
-      {{ t("dataset.column_configuration") }}
-      <textarea name="config" id="widget-edit-config" class="mono" rows="4"></textarea>
-    </label>
-    <div>
+  <div id="widget-edit-section" hidden>
+    <h2>{{ t("views.edit_widget") }}</h2>
+    <form id="widget-edit-form" method="post" action="{{ url_for('web.widget_update', view_id=view.id, widget_id=0, next=request.path) }}" class="widget-form">
+      <input type="hidden" id="we-type" value="">
+      <label>{{ t("views.add_widget_title") }}
+        <input name="title" id="we-title">
+      </label>
+      <label data-field="dataset">{{ t("views.add_widget_dataset") }}
+        <select name="dataset_id" id="we-dataset">
+          <option value=""></option>
+          {% for ds in datasets %}<option value="{{ ds.id }}">{{ ds.name }} ({{ ds.slug }})</option>{% endfor %}
+        </select>
+      </label>
+      <label data-field="column">{{ t("views.widget_value_column") }}
+        <select name="column" id="we-column"><option value=""></option></select>
+      </label>
+      <label data-field="measure">{{ t("views.widget_measure") }}
+        <select name="measure" id="we-measure">
+          <option value="sum">sum</option>
+          <option value="avg">avg</option>
+          <option value="count">count</option>
+          <option value="min">min</option>
+          <option value="max">max</option>
+          <option value="median">median</option>
+        </select>
+      </label>
+      <label data-field="group_by">{{ t("views.widget_group_by") }}
+        <select name="group_by" id="we-groupby"><option value=""></option></select>
+      </label>
+      <label data-field="series">{{ t("views.widget_series") }}
+        <select name="series" id="we-series"><option value=""></option></select>
+      </label>
+      <label data-field="text">{{ t("views.widget_note_text") }}
+        <textarea name="text" id="we-text" rows="2"></textarea>
+      </label>
+      <input type="hidden" name="config" id="we-config" value="">
       <button type="submit">{{ t("dataset.save") }}</button>
       <button type="button" id="widget-edit-cancel">{{ t("datasets.cancel_btn") }}</button>
+    </form>
+  </div>
+
+  <h2>{{ t("views.settings") }}</h2>
+  <form id="view-settings-form" method="post" action="{{ url_for('web.view_settings_save', view_id=view.id) }}">
+    <label>{{ t("views.custom_css") }}
+      <textarea name="custom_css" class="mono" rows="6" placeholder="{{ t('views.custom_css_hint') }}">{{ (view.settings or {}).get('custom_css', '') }}</textarea>
+    </label>
+    <div class="settings-row">
+      <label class="field-inline">{{ t("views.refresh") }}
+        <input type="number" name="refresh" min="0" max="3600" value="{{ (view.settings or {}).get('refresh', 0) }}">
+      </label>
+      <label class="check-label">
+        <input type="checkbox" name="kiosk" value="1" {% if (view.settings or {}).get('kiosk') %}checked{% endif %}>
+        {{ t("views.kiosk") }}
+      </label>
+      <button type="submit">{{ t("views.save_settings") }}</button>
     </div>
   </form>
 </div>
 
-<h2>{{ t("views.settings") }}</h2>
-<form id="view-settings-form" method="post" action="{{ url_for('web.view_settings_save', view_id=view.id) }}" class="form-grid cols">
-  <label>
-    {{ t("views.custom_css") }}
-    <textarea name="custom_css" class="mono" rows="6" placeholder="{{ t('views.custom_css_hint') }}">{{ (view.settings or {}).get('custom_css', '') }}</textarea>
-  </label>
-  <label>
-    {{ t("views.refresh") }}
-    <input type="number" name="refresh" min="0" max="3600" value="{{ (view.settings or {}).get('refresh', 0) }}">
-  </label>
-  <label>
-    <input type="checkbox" name="kiosk" value="1" {% if (view.settings or {}).get('kiosk') %}checked{% endif %}>
-    {{ t("views.kiosk") }}
-  </label>
-  <div>
-    <button type="submit">{{ t("views.save_settings") }}</button>
-  </div>
-</form>
+<script id="datasets-json" type="application/json">{{ datasets_json | tojson }}</script>
 {% endblock %}
 
 {% block scripts %}

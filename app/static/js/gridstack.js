@@ -55,8 +55,18 @@
     var resz = document.createElement("div");
     resz.className = "ui-resizable-se";
     node.appendChild(resz);
-    resz.addEventListener("mousedown", function (ev) { self._startResize(ev, node); });
-    resz.addEventListener("touchstart", function (ev) { self._startResize(ev, node); }, { passive: true });
+    resz.addEventListener("mousedown", function (ev) { self._startResize(ev, node, "se"); });
+    resz.addEventListener("touchstart", function (ev) { self._startResize(ev, node, "se"); }, { passive: true });
+    var reszE = document.createElement("div");
+    reszE.className = "ui-resizable-e";
+    node.appendChild(reszE);
+    reszE.addEventListener("mousedown", function (ev) { self._startResize(ev, node, "e"); });
+    reszE.addEventListener("touchstart", function (ev) { self._startResize(ev, node, "e"); }, { passive: true });
+    var reszS = document.createElement("div");
+    reszS.className = "ui-resizable-s";
+    node.appendChild(reszS);
+    reszS.addEventListener("mousedown", function (ev) { self._startResize(ev, node, "s"); });
+    reszS.addEventListener("touchstart", function (ev) { self._startResize(ev, node, "s"); }, { passive: true });
   };
 
   GridStack.prototype._cellColWidth = function () {
@@ -155,7 +165,7 @@
     window.addEventListener("touchend", up);
   };
 
-  GridStack.prototype._startResize = function (ev, node) {
+  GridStack.prototype._startResize = function (ev, node, axis) {
     if (ev.button !== 0 && ev.type === "mousedown") { return; }
     ev.preventDefault();
     ev.stopPropagation();
@@ -167,12 +177,13 @@
     var startY = (ev.touches ? ev.touches[0].clientY : ev.clientY);
     var origW = g.w;
     var origH = g.h;
+    axis = axis || "se";
     node.classList.add("ui-resizable-resizing");
     function move(e) {
       var cx = (e.touches ? e.touches[0].clientX : e.clientX);
       var cy = (e.touches ? e.touches[0].clientY : e.clientY);
-      g.w = toInt(origW + Math.round((cx - startX) / cw), g.w);
-      g.h = toInt(origH + Math.round((cy - startY) / ch), g.h);
+      if (axis !== "s") { g.w = toInt(origW + Math.round((cx - startX) / cw), g.w); }
+      if (axis !== "e") { g.h = toInt(origH + Math.round((cy - startY) / ch), g.h); }
       self._snap(g);
       self._applyStyle(node);
     }

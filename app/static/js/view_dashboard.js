@@ -40,22 +40,156 @@
       .catch(function () {});
   }
 
-  // Widgets
+  // ---- datasets & column picker (issues #2, #3) ----
+  var datasetsData = [];
+  try {
+    var dsEl = document.getElementById("datasets-json");
+    if (dsEl) { datasetsData = JSON.parse(dsEl.textContent || "[]"); }
+  } catch (e) { datasetsData = []; }
+
+  function datasetColumns(dsId) {
+    var n = parseInt(dsId, 10);
+    for (var i = 0; i < datasetsData.length; i++) {
+      if (datasetsData[i].id === n) { return datasetsData[i].columns || []; }
+    }
+    return [];
+  }
+
+  function populateColumns(select, columns, selected) {
+    if (!select) { return; }
+    select.innerHTML = '<option value=""></option>';
+    columns.forEach(function (c) {
+      var opt = document.createElement("option");
+      opt.value = c.key;
+      opt.textContent = c.label || c.key;
+      if (selected && c.key === selected) { opt.selected = true; }
+      select.appendChild(opt);
+    });
+  }
+
+  // Which fields each widget type needs
+  var FIELD_RULES = {
+    note:          ["text"],
+    global_filter: ["dataset", "column"],
+    kpi_sum:       ["dataset", "column"],
+    kpi_avg:       ["dataset", "column"],
+    kpi_min:       ["dataset", "column"],
+    kpi_max:       ["dataset", "column"],
+    kpi_count:     ["dataset"],
+    kpi_median:    ["dataset", "column"],
+    kpi_trend:     ["dataset", "column"],
+    bar:           ["dataset", "measure", "column", "group_by"],
+    stacked_bar:   ["dataset", "measure", "column", "group_by", "series"],
+    line:          ["dataset", "measure", "column", "group_by"],
+    pie:           ["dataset", "measure", "column", "group_by"],
+    heatmap:       ["dataset", "measure", "column", "group_by"],
+    agg_table:     ["dataset", "measure", "column", "group_by"],
+    table:         ["dataset"],
+    form:          ["dataset"],
+  };
+  function visibleFields(type) { return FIELD_RULES[type] || []; }
+
+  var FIELD_ID_MAP = { dataset: "dataset", column: "column", measure: "measure", group_by: "groupby", series: "series", text: "text" };
+
+  function updateFieldVisibility(form) {
+    if (!form) { return; }
+    var typeEl = form.querySelector("#wc-type") || form.querySelector("#we-type");
+    var type = typeEl ? typeEl.value : "";
+    var fields = visibleFields(type);
+    $$("[data-field]", form).forEach(function (label) {
+      var f = label.getAttribute("data-field");
+      if (fields.indexOf(f) === -1) {
+        label.setAttribute("hidden", "");
+      } else {
+        label.removeAttribute("hidden");
+      }
+    });
+  }
+
+  function buildConfig(form, prefix) {
+    var typeEl = form.querySelector("#" + prefix + "-type");
+    var type = typeEl ? typeEl.value : "";
+    var fields = visibleFields(type);
+    var config = {};
+    fields.forEach(function (f) {
+      var el = form.querySelector("#" + prefix + "-" + (FIELD_ID_MAP[f] || f));
+      if (!el) { return; }
+      var val = el.value;
+      if (f === "dataset") {
+        if (val) { config["dataset_id"] = parseInt(val, 10); }
+      } else if (f === "text") {
+        if (val && val.trim()) { config["text"] = val.trim(); }
+      } else {
+        if (val && val.trim()) { config[f] = val.trim(); }
+      }
+    });
+    return config;
+  }
+
+  function bindDatasetChange(form, prefix) {
+    var dsEl = form.querySelector("#" + prefix + "-dataset");
+    if (!dsEl) { return; }
+    dsEl.addEventListener("change", function () {
+      var cols = datasetColumns(dsEl.value);
+      ["column", "groupby", "series"].forEach(function (suffix) {
+        var sel = form.querySelector("#" + prefix + "-" + suffix);
+        if (sel) { populateColumns(sel, cols, ""); }
+      });
+    });
+  }
+
+  // ---- create form (issues #2, #3) ----
+  var createForm = $("#widget-create-form");
+  if (createForm) {
+    var wcType = $("#wc-type");
+    if (wcType) { wcType.addEventListener("change", function () { updateFieldVisibility(createForm); }); }
+    bindDatasetChange(createForm, "wc");
+    updateFieldVisibility(createForm);
+    createForm.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      $("#wc-config").value = JSON.stringify(buildConfig(createForm, "wc"));
+      createForm.submit();
+    });
+  }
+
+  // ---- edit form (issues #2, #3, #5) ----
   var editSection = $("#widget-edit-section");
   var editForm = $("#widget-edit-form");
-  var editTitle = $("#widget-edit-title");
-  var editConfig = $("#widget-edit-config");
   var editCancel = $("#widget-edit-cancel");
   var currentWidgetNode = null;
 
   function openEdit(node) {
     currentWidgetNode = node;
     var title = $(".widget-title", node).textContent.trim();
-    editTitle.value = title;
-    editConfig.value = JSON.stringify({});
+    $("#we-title").value = title;
+    var widget = $(".widget", node);
+    var type = widget ? widget.getAttribute("data-widget-type") : "";
+    var cfg = {};
+    try { cfg = JSON.parse(widget ? (widget.getAttribute("data-widget-config") || "{}") : "{}"); } catch (e) { cfg = {}; }
+    var weType = $("#we-type");
+    if (weType) { weType.value = type; }
+    if (cfg.dataset_id) {
+      var weDs = $("#we-dataset");
+      if (weDs) { weDs.value = String(cfg.dataset_id); }
+      var cols = datasetColumns(cfg.dataset_id);
+      [{ s: "column", k: "column" }, { s: "groupby", k: "group_by" }, { s: "series", k: "series" }].forEach(function (m) {
+        var sel = $("#we-" + m.s);
+        if (sel) { populateColumns(sel, cols, cfg[m.k] || ""); }
+      });
+    } else {
+      ["column", "groupby", "series"].forEach(function (suffix) {
+        var sel = $("#we-" + suffix);
+        if (sel) { sel.innerHTML = '<option value=""></option>'; }
+      });
+    }
+    var weMeasure = $("#we-measure");
+    if (weMeasure && cfg.measure) { weMeasure.value = cfg.measure; }
+    var weText = $("#we-text");
+    if (weText) { weText.value = cfg.text || ""; }
+    updateFieldVisibility(editForm);
     editSection.removeAttribute("hidden");
     editSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    editTitle.focus();
+    $("#we-title").focus();
   }
   function closeEdit() {
     currentWidgetNode = null;
@@ -87,14 +221,17 @@
   }
 
   if (editForm) {
+    var weTypeEl = $("#we-type");
+    if (weTypeEl) { weTypeEl.addEventListener("change", function () { updateFieldVisibility(editForm); }); }
+    bindDatasetChange(editForm, "we");
     editForm.addEventListener("submit", function (ev) {
       if (!currentWidgetNode) { ev.preventDefault(); return; }
       ev.preventDefault();
       var wid = currentWidgetNode.getAttribute("gs-id");
       var action = editForm.getAttribute("action").replace(/\/widgets\/0(\?|$)/, "/widgets/" + wid + "$1");
       var body = new FormData();
-      body.set("title", editTitle.value);
-      body.set("config", editConfig.value);
+      body.set("title", $("#we-title").value);
+      body.set("config", JSON.stringify(buildConfig(editForm, "we")));
       fetch(action, { method: "POST", body: body })
         .then(function () { location.reload(); })
         .catch(function () {});
@@ -107,16 +244,7 @@
   if (settings.refresh && settings.refresh > 0) {
     setInterval(function () {
       $$(".widget", gridEl).forEach(function (widget) {
-        var type = widget.getAttribute("data-widget-type");
-        var config = {};
-        try { config = JSON.parse(widget.getAttribute("data-widget-config") || "{}"); } catch (e) {}
-        var body = $("[data-widget-body]", widget);
-        var placeholder = $("[data-widget-placeholder]", widget);
-        if (placeholder) { placeholder.style.display = "none"; }
-        if (body) { body.innerHTML = ""; }
-        if (window.StatDBRenderers) {
-          window.StatDBRenderers.render(type, body || widget, { config: config });
-        }
+        if (window.StatDBWidgets) { window.StatDBWidgets.renderWidget(widget); }
       });
     }, settings.refresh * 1000);
   }

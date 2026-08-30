@@ -83,10 +83,21 @@ async def view_detail(view_id: int):
         abort(404)
     view["widgets"] = await store.list_widgets(view_id)
     datasets = await CatalogStore(get_db()).list_datasets()
+    datasets_json = [
+        {
+            "id": ds["id"],
+            "columns": [
+                {"key": c["key"], "label": c["label"] or c["key"], "type": c["type"]}
+                for c in ds.get("columns", [])
+            ],
+        }
+        for ds in datasets
+    ]
     return await render_template(
         "view_detail.html",
         view=view,
         datasets=datasets,
+        datasets_json=datasets_json,
         widget_types=sorted(WIDGET_TYPES),
     )
 
@@ -103,6 +114,38 @@ async def view_create():
 
 # ---------- widgets (F8) ----------
 
+def _widget_config_from_form(form) -> dict[str, Any]:
+    """Build widget config from form data.
+
+    Accepts either a JSON ``config`` field (built by the friendly GUI)
+    or individual named fields (``dataset_id``, ``column``, ``measure``,
+    ``group_by``, ``series``, ``text``) for backward compatibility.
+    """
+    raw = str(form.get("config", "") or "").strip()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+    config: dict[str, Any] = {}
+    ds = form.get("dataset_id")
+    if ds:
+        try:
+            config["dataset_id"] = int(ds)
+        except (ValueError, TypeError):
+            pass
+    for key in ("column", "measure", "group_by", "series", "op"):
+        val = str(form.get(key, "") or "").strip()
+        if val:
+            config[key] = val
+    text_val = str(form.get("text", "") or "").strip()
+    if text_val:
+        config["text"] = text_val
+    return config
+
+
 async def _views_ctx(view_id: int) -> tuple[ViewStore, dict[str, Any]]:
     store = ViewStore(get_db())
     view = await store.get_view(view_id)
@@ -117,13 +160,7 @@ async def widget_create(view_id: int):
     form = await request.form
     widget_type = str(form.get("type", "")).strip()
     title = str(form.get("title", ""))
-    dataset_id = form.get("dataset_id")
-    config: dict[str, Any] = {}
-    if dataset_id:
-        config["dataset_id"] = int(dataset_id)
-    column_name = str(form.get("column", "")).strip()
-    if column_name:
-        config["column"] = column_name
+    config = _widget_config_from_form(form)
     await store.add_widget(view["id"], widget_type, title=title, config=config)
     return redirect(f"/views/{view_id}")
 
@@ -149,12 +186,7 @@ async def widget_update(view_id: int, widget_id: int):
     if not widget or widget.get("view_id") != view["id"]:
         abort(404)
     title = str(form.get("title", "")).strip()
-    try:
-        config = json.loads(str(form.get("config", "") or "{}") or "{}")
-        if not isinstance(config, dict):
-            config = {}
-    except json.JSONDecodeError:
-        config = {}
+    config = _widget_config_from_form(form)
     await store.update_widget(widget["id"], title=title, config=config)
     return redirect(f"/views/{view_id}")
 

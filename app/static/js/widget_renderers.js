@@ -394,6 +394,11 @@
     agg_table: { aggConfig: { measure: "sum" }, render: renderAggTable, agg: true, group: true },
   };
 
+  function cfgMsg(attr, fallback) {
+    var el = document.getElementById("view-config");
+    return (el && el.getAttribute(attr)) || fallback;
+  }
+
   function renderWidget(section) {
     var body = $("[data-widget-body]", section);
     if (!body) { return; }
@@ -401,12 +406,18 @@
     var cfg = {};
     try { cfg = JSON.parse(section.getAttribute("data-widget-config") || "{}"); } catch (e) { cfg = {}; }
     var fn = RENDERERS[type];
-    if (!fn) { return; }
     var ph = $("[data-widget-placeholder]", section);
     clearBody(body);
+    if (!fn) {
+      if (ph) { ph.textContent = cfgMsg("data-no-renderer", "This widget type has no visual renderer yet."); }
+      return;
+    }
     if (fn.agg) {
       cfg = Object.assign({}, (fn.aggConfig || {}), cfg);
-      if (!cfg.dataset_id) { return; }
+      if (!cfg.dataset_id) {
+        if (ph) { ph.textContent = cfgMsg("data-no-dataset", "Select a dataset to display data."); }
+        return;
+      }
       fetchAggregate(cfg)
         .then(function (data) {
           var ok = fn.render(body, data, cfg);

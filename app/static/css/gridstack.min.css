@@ -85,10 +85,21 @@
   font-size: 0.1px;
   display: block;
   touch-action: none;
+  z-index: 20;
 }
-.ui-resizable-s { cursor: s-resize; height: 10px; bottom: -5px; left: 0; right: 0; }
-.ui-resizable-e { cursor: e-resize; width: 10px; right: -5px; top: 0; bottom: 0; }
-.ui-resizable-se { cursor: se-resize; width: 14px; height: 14px; right: -4px; bottom: -4px; }
+.ui-resizable-s { cursor: s-resize; height: 8px; bottom: 0; left: 12px; right: 12px; }
+.ui-resizable-e { cursor: e-resize; width: 8px; right: 0; top: 12px; bottom: 12px; }
+.ui-resizable-se { cursor: se-resize; width: 16px; height: 16px; right: 0; bottom: 0; }
+.ui-resizable-se::after {
+  content: "";
+  position: absolute;
+  right: 3px; bottom: 3px;
+  width: 8px; height: 8px;
+  border-right: 2px solid var(--fg-muted, #9aa7bd);
+  border-bottom: 2px solid var(--fg-muted, #9aa7bd);
+  opacity: 0.5;
+}
+.ui-resizable-se:hover::after { opacity: 1; }
 /* widget chrome */
 .widget {
   background: var(--bg-soft, #171e2e);
