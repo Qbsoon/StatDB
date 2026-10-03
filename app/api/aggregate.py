@@ -5,6 +5,7 @@ Body:
     "dataset":  <id or slug>,
     "measure":  "sum|avg|count|min|max|median",   # default "sum"
     "column":   "<measure source column>",        # required for non-count
+    "per_column": "<distinct-count divisor col>", # required for measure=avg_per
     "group_by": "<column key>",                   # optional — or a LIST of keys
                                                  # for a composite axis, e.g.
                                                  # ["year", "month"]
@@ -57,6 +58,7 @@ async def run_aggregate() -> Any:
     spec = {
         "measure": body.get("measure", "sum"),
         "column": body.get("column"),
+        "per_column": body.get("per_column"),
         "group_by": group_by,
         "series": body.get("series"),
         "filters": body.get("filters"),

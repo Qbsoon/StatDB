@@ -141,6 +141,8 @@ class CatalogStore:
         )
         # physical side
         await phys.add_physical_column(self.db, dataset, {"id": col_id, "key": key, "type": type_key, "position": position})
+        if type_key == "formula":
+            await self._backfill_formulas(dataset["id"])
         return self._column_meta(
             await self.db.query_one("SELECT * FROM columns WHERE id = ?", (col_id,)) or {}
         )
@@ -159,9 +161,37 @@ class CatalogStore:
                 column_id,
             ),
         )
+        if row["type"] == "formula" and config is not None:
+            await self._backfill_formulas(row["dataset_id"])
         return self._column_meta(
             await self.db.query_one("SELECT * FROM columns WHERE id = ?", (column_id,)) or {}
         )
+
+    async def _backfill_formulas(self, dataset_id: int) -> None:
+        """Recompute cached formula values for every existing row.
+
+        Called when a formula column is added (rows created earlier still
+        hold NULLs) or when its expression changes; formulas are computed
+        row-write-time, so a mass recompute must happen explicitly here.
+        """
+        from ..rows.formula import recompute_formulas  # local import: no cycle
+
+        dataset = await self.get_dataset(dataset_id=dataset_id)
+        if not dataset:
+            return
+        columns = dataset["columns"]
+        formula_cols = [c for c in columns if c["type"] == "formula"]
+        if not formula_cols:
+            return
+        table = phys.physical_table_name(dataset["slug"])
+        sets = ", ".join(f'"{c["key"]}" = ?' for c in formula_cols)
+        rows = await self.db.query_all(f'SELECT * FROM "{table}"')
+        for r in rows:
+            merged = recompute_formulas({c["key"]: r.get(c["key"]) for c in columns}, columns)
+            await self.db.execute(
+                f'UPDATE "{table}" SET {sets} WHERE id = ?',
+                tuple(merged[c["key"]] for c in formula_cols) + (r.get("id"),),
+            )
 
     async def remove_column(self, column_id: int) -> None:
         row = await self.db.query_one("SELECT * FROM columns WHERE id = ?", (column_id,))

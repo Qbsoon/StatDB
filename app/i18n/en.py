@@ -83,6 +83,7 @@ STRINGS = {
     "views.widget_placeholder": "Configure this widget \u2014 pick a dataset and columns below.",
     "views.widget_value_column": "Value column",
     "views.widget_measure": "Measure",
+    "views.widget_per_column": "Per column (distinct count)",
     "views.widget_group_by": "Group by",
     "views.widget_series": "Series (breakdown)",
     "views.widget_note_text": "Note text",

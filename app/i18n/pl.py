@@ -83,6 +83,7 @@ STRINGS = {
     "views.widget_placeholder": "Skonfiguruj widżet — wybierz zbiór danych i kolumny poniżej.",
     "views.widget_value_column": "Kolumna wartości",
     "views.widget_measure": "Miara",
+    "views.widget_per_column": "Kolumna podziału (unikalne wartości)",
     "views.widget_group_by": "Grupuj wg",
     "views.widget_series": "Seria (podział)",
     "views.widget_note_text": "Tekst notatki",

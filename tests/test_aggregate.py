@@ -65,6 +65,68 @@ async def test_scalar_sum_count_avg(agg_db):
     assert result["value"] == 12000.0
 
 
+async def test_avg_per_scalar_per_column_variants(agg_db):
+    """avg_per = SUM(column) / COUNT(DISTINCT per_column) — e.g. sum ÷ months."""
+    ds = await _seed(agg_db)
+    from app.aggregation import aggregate
+
+    result = await aggregate(agg_db, ds, {
+        "measure": "avg_per", "column": "amount", "per_column": "month",
+    })
+    assert result["kind"] == "scalar"
+    # seeded months: 01..05 → 5 distinct
+    assert result["value"] == pytest.approx(48000.0 / 5)
+
+    # any column type works as the divisor — here a select column (2 options)
+    result = await aggregate(agg_db, ds, {
+        "measure": "avg_per", "column": "amount", "per_column": "source",
+    })
+    assert result["value"] == pytest.approx(48000.0 / 2)
+
+
+async def test_avg_per_grouped_by_year_partial_year_counts_present_months(agg_db):
+    """The original use case: 2 records/month, avg per month grouped by year.
+    A year with data only for some months divides by those months, not 12."""
+    from app.aggregation import aggregate
+
+    store = CatalogStore(agg_db)
+    ds = await store.create_dataset("monthly", "Miesięczne")
+    await store.add_column(ds["id"], "year", "Rok", "year", {}, 1)
+    await store.add_column(ds["id"], "month", "Miesiąc", "year-month", {"input_format": "MM-YYYY"}, 2)
+    await store.add_column(ds["id"], "amount", "Kwota", "currency", {"currency_code": "PLN"}, 3)
+    ds = await store.get_dataset(dataset_id=ds["id"])
+    rs = RowStore(agg_db)
+    # 2025: 12 months × 2 records of 500 → yearSum ÷ 12 = 1000
+    for m in range(1, 13):
+        for _ in range(2):
+            await rs.create_row(ds, {"year": 2025, "month": f"{m:02d}-2025", "amount": 500})
+    # 2026: 3 months × 2 records of 100 → present-months avg = 200 (not /12 = 50)
+    for m in range(1, 4):
+        for _ in range(2):
+            await rs.create_row(ds, {"year": 2026, "month": f"{m:02d}-2026", "amount": 100})
+
+    result = await aggregate(agg_db, ds, {
+        "measure": "avg_per", "column": "amount", "per_column": "month",
+        "group_by": "year",
+    })
+    assert result["kind"] == "grouped"
+    values = {it["key"]: it["value"] for it in result["items"]}
+    assert values[2025] == pytest.approx(1000.0)
+    assert values[2026] == pytest.approx(200.0)
+
+
+async def test_avg_per_missing_per_column(agg_db):
+    ds = await _seed(agg_db)
+    from app.aggregation import aggregate
+
+    with pytest.raises(ValueError):
+        await aggregate(agg_db, ds, {"measure": "avg_per", "column": "amount"})
+    with pytest.raises(ValueError):
+        await aggregate(agg_db, ds, {
+            "measure": "avg_per", "column": "amount", "per_column": "nope",
+        })
+
+
 async def test_scalar_median_odd_even(agg_db):
     ds = await _seed(agg_db)
     from app.aggregation import aggregate

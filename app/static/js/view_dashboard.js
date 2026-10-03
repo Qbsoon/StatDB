@@ -85,38 +85,51 @@
     kpi_count:     ["dataset"],
     kpi_median:    ["dataset", "column"],
     kpi_trend:     ["dataset", "column"],
-    bar:                    ["dataset", "measure", "column", "group_by", "group_by_2"].concat(SORT_FIELDS),
-    stacked_bar:            ["dataset", "measure", "column", "group_by", "group_by_2", "series"].concat(SORT_FIELDS),
-    bar_vertical:           ["dataset", "measure", "column", "group_by", "group_by_2"].concat(SORT_FIELDS),
-    stacked_bar_vertical:   ["dataset", "measure", "column", "group_by", "group_by_2", "series"].concat(SORT_FIELDS),
-    line:          ["dataset", "measure", "column", "group_by", "group_by_2"].concat(SORT_FIELDS),
-    pie:           ["dataset", "measure", "column", "group_by"].concat(SORT_FIELDS),
-    heatmap:       ["dataset", "measure", "column", "group_by", "group_by_2", "series"].concat(SORT_FIELDS),
-    agg_table:     ["dataset", "measure", "column", "group_by", "group_by_2"].concat(SORT_FIELDS),
+    bar:                    ["dataset", "measure", "column", "per_column", "group_by", "group_by_2"].concat(SORT_FIELDS),
+    stacked_bar:            ["dataset", "measure", "column", "per_column", "group_by", "group_by_2", "series"].concat(SORT_FIELDS),
+    bar_vertical:           ["dataset", "measure", "column", "per_column", "group_by", "group_by_2"].concat(SORT_FIELDS),
+    stacked_bar_vertical:   ["dataset", "measure", "column", "per_column", "group_by", "group_by_2", "series"].concat(SORT_FIELDS),
+    line:          ["dataset", "measure", "column", "per_column", "group_by", "group_by_2"].concat(SORT_FIELDS),
+    pie:           ["dataset", "measure", "column", "per_column", "group_by"].concat(SORT_FIELDS),
+    heatmap:       ["dataset", "measure", "column", "per_column", "group_by", "group_by_2", "series"].concat(SORT_FIELDS),
+    agg_table:     ["dataset", "measure", "column", "per_column", "group_by", "group_by_2"].concat(SORT_FIELDS),
     table:         ["dataset"],
     form:          ["dataset"],
   };
   function visibleFields(type) { return FIELD_RULES[type] || []; }
 
   var FIELD_ID_MAP = {
-    dataset: "dataset", column: "column", measure: "measure",
+    dataset: "dataset", column: "column", measure: "measure", per_column: "percolumn",
     group_by: "groupby", group_by_2: "groupby2", series: "series", text: "text",
     sort_by: "sortby", sort_dir: "sortdir",
   };
 
   function updateFieldVisibility(form) {
     if (!form) { return; }
-    var typeEl = form.querySelector("#wc-type") || form.querySelector("#we-type");
+    var prefix = form.querySelector("#wc-type") ? "wc" : "we";
+    var typeEl = form.querySelector("#" + prefix + "-type");
     var type = typeEl ? typeEl.value : "";
     var fields = visibleFields(type);
     $$("[data-field]", form).forEach(function (label) {
       var f = label.getAttribute("data-field");
-      if (fields.indexOf(f) === -1) {
+      var visible = fields.indexOf(f) !== -1;
+      if (f === "per_column") {
+        // divisor field only matters for the avg_per measure — even for
+        // chart types that support it, keep it hidden otherwise
+        var m = form.querySelector("#" + prefix + "-measure");
+        visible = visible && !!(m && m.value === "avg_per");
+      }
+      if (!visible) {
         label.setAttribute("hidden", "");
       } else {
         label.removeAttribute("hidden");
       }
     });
+  }
+
+  function bindMeasureChange(form, prefix) {
+    var m = form.querySelector("#" + prefix + "-measure");
+    if (m) { m.addEventListener("change", function () { updateFieldVisibility(form); }); }
   }
 
   function buildConfig(form, prefix) {
@@ -147,7 +160,7 @@
     if (!dsEl) { return; }
     dsEl.addEventListener("change", function () {
       var cols = datasetColumns(dsEl.value);
-      ["column", "groupby", "groupby2", "series"].forEach(function (suffix) {
+      ["column", "percolumn", "groupby", "groupby2", "series"].forEach(function (suffix) {
         var sel = form.querySelector("#" + prefix + "-" + suffix);
         if (sel) { populateColumns(sel, cols, ""); }
       });
@@ -189,6 +202,7 @@
     var wcType = $("#wc-type");
     if (wcType) { wcType.addEventListener("change", function () { updateFieldVisibility(createForm); }); }
     bindDatasetChange(createForm, "wc");
+    bindMeasureChange(createForm, "wc");
     updateFieldVisibility(createForm);
     createForm.addEventListener("submit", function (ev) {
       ev.preventDefault();
@@ -217,12 +231,12 @@
       var weDs = $("#we-dataset");
       if (weDs) { weDs.value = String(cfg.dataset_id); }
       var cols = datasetColumns(cfg.dataset_id);
-      [{ s: "column", k: "column" }, { s: "groupby", k: "group_by" }, { s: "groupby2", k: "group_by_2" }, { s: "series", k: "series" }].forEach(function (m) {
+      [{ s: "column", k: "column" }, { s: "percolumn", k: "per_column" }, { s: "groupby", k: "group_by" }, { s: "groupby2", k: "group_by_2" }, { s: "series", k: "series" }].forEach(function (m) {
         var sel = $("#we-" + m.s);
         if (sel) { populateColumns(sel, cols, cfg[m.k] || ""); }
       });
     } else {
-      ["column", "groupby", "groupby2", "series"].forEach(function (suffix) {
+      ["column", "percolumn", "groupby", "groupby2", "series"].forEach(function (suffix) {
         var sel = $("#we-" + suffix);
         if (sel) { sel.innerHTML = '<option value=""></option>'; }
       });
@@ -272,6 +286,7 @@
     var weTypeEl = $("#we-type");
     if (weTypeEl) { weTypeEl.addEventListener("change", function () { updateFieldVisibility(editForm); }); }
     bindDatasetChange(editForm, "we");
+    bindMeasureChange(editForm, "we");
     editForm.addEventListener("submit", function (ev) {
       if (!currentWidgetNode) { ev.preventDefault(); return; }
       ev.preventDefault();

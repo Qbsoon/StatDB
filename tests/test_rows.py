@@ -108,6 +108,28 @@ def test_recompute_formulas_uses_row():
     assert out["broken"] is None
 
 
+async def test_formula_column_backfilled_for_existing_rows(rows_db):
+    """Adding a formula column after rows exist must fill their cached values,
+    not leave NULLs rendering as '-'."""
+    from app.catalog.store import CatalogStore
+    from app.rows.store import RowStore
+
+    store = CatalogStore(rows_db)
+    ds = await store.create_dataset("backfill", "Backfill")
+    await store.add_column(ds["id"], "amount", "Kwota", "currency", {"currency_code": "PLN"}, 1)
+    ds = await store.get_dataset(dataset_id=ds["id"])
+    rs = RowStore(rows_db)
+    await rs.create_row(ds, {"amount": 1200})
+    await rs.create_row(ds, {"amount": 600})
+
+    col = await store.add_column(
+        ds["id"], "half", "Połowa", "formula", {"expression": "amount / 2"}, 2
+    )
+    ds = await store.get_dataset(dataset_id=ds["id"])
+    rows = (await rs.list_rows(ds))["items"]
+    assert sorted(r[col["key"]] for r in rows) == [300.0, 600.0]
+
+
 # ---------- row store CRUD ----------
 
 

@@ -75,6 +75,7 @@
       dataset: config.dataset_id,
       measure: config.measure || "sum",
       column: config.column || null,
+      per_column: config.per_column || null,
       group_by: groupByList(config),
       series: config.series || null,
       filters: Object.assign({}, config.filters || {}),

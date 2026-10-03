@@ -16,7 +16,7 @@ AGG_SQL = {
     "min": "MIN",
     "max": "MAX",
 }
-ALL_MEASURES = set(AGG_SQL) | {"median"}
+ALL_MEASURES = set(AGG_SQL) | {"median", "avg_per"}
 
 MONTHS_PL = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec",
              "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"]
@@ -39,8 +39,12 @@ async def aggregate(db: Database, dataset: dict[str, Any], spec: dict[str, Any])
     """Run an aggregation request.
 
     Spec keys:
-      measure   – aggregation: sum | avg | count | min | max | median (default sum)
+      measure   – aggregation: sum | avg | count | min | max | median | avg_per
+                  (default sum). avg_per = SUM(column) / COUNT(DISTINCT per_column)
+                  — e.g. yearly sum ÷ number of distinct months in that year.
       column    – measure column key (any numeric; default = count(*))
+      per_column – divisor column for avg_per: COUNT(DISTINCT …) of its values,
+                  required only when measure=avg_per
       group_by  – column key, or a LIST of keys (e.g. ["year", "month"]) for a
                   composite bucket axis — timeline "month over year" (todo §15.12)
       series    – second key: each value becomes one output series
@@ -54,6 +58,7 @@ async def aggregate(db: Database, dataset: dict[str, Any], spec: dict[str, Any])
         raise ValueError(f"bad measure '{measure}'")
 
     col_key = spec.get("column")
+    per_key = spec.get("per_column")
     raw_group = spec.get("group_by")
     if raw_group is None:
         group_keys: list[str] = []
@@ -77,6 +82,8 @@ async def aggregate(db: Database, dataset: dict[str, Any], spec: dict[str, Any])
         raise ValueError(f"bad measure '{measure}'")
     if measure != "count" and col_key not in columns:
         raise ValueError(f"bad measure column '{col_key}'")
+    if measure == "avg_per" and per_key not in columns:
+        raise ValueError(f"avg_per requires 'per_column' — unknown column '{per_key}'")
     for gk in group_keys:
         if gk not in columns:
             raise ValueError(f"bad group_by column '{gk}'")
@@ -95,7 +102,13 @@ async def aggregate(db: Database, dataset: dict[str, Any], spec: dict[str, Any])
         med = (vals[(n - 1) // 2] + vals[n // 2]) / 2 if n else None
         return {"kind": "scalar", "value": med, "measure": "median"}
 
-    if measure == "count" and not col_key:
+    if measure == "avg_per":
+        # sum ÷ distinct count of the "per" column — NULLIF guards against
+        # division by zero when no row carries a divisor value
+        measure_expr = (
+            f'CAST(SUM("{col_key}") AS REAL) / NULLIF(COUNT(DISTINCT "{per_key}"), 0)'
+        )
+    elif measure == "count" and not col_key:
         measure_expr = "COUNT(*)"
     else:
         col = f'"{col_key}"'
